@@ -9,6 +9,9 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 
+// pitch (y axis or axis perpendicular to nose): direction of ports is + and opposite is -
+// roll
+//quad02
 //gcc -o week1 week_1_student.cpp -lwiringPi  -lm
 
 
@@ -32,6 +35,8 @@ struct timespec te;
 float yaw=0;
 float pitch_angle=0;
 float roll_angle=0;
+#define RAW_TO_GS 10922.667
+#define RAW_TO_DEG 32.768
 
  
 int main (int argc, char *argv[])
@@ -48,7 +53,7 @@ int main (int argc, char *argv[])
   
 }
 
-void calibrate_imu()
+void calibrate_imu()  // note that we calibrate the angles not, the accelerometer readings
 {
  
   /*
@@ -75,19 +80,9 @@ void read_imu()
   int vw=0;
 
 
-  //accel reads
+  //accel reads: x, y, z
 
-  address=??//use 0x00 format for hex
-  vw=wiringPiI2CReadReg16(accel_address,address);    
-  //convert from 2's complement
-  if(vw>0x8000)
-  {
-    vw=vw ^ 0xffff;
-    vw=-vw-1;
-  }          
-  imu_data[0]=??;//convert to g's  
-  
-  address=??//use 0x00 format for hex
+  address=0x12;//use 0x00 format for hex
   vw=wiringPiI2CReadReg16(accel_address,address);   
   //convert from 2's complement
   if(vw>0x8000)
@@ -95,9 +90,19 @@ void read_imu()
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[1]=??;//convert to g's  
+  imu_data[0]=vw/RAW_TO_GS;//convert to g's 
   
-  address=??//use 0x00 format for hex
+  address=0x14;//use 0x00 format for hex
+  vw=wiringPiI2CReadReg16(accel_address,address);   
+  //convert from 2's complement
+  if(vw>0x8000)
+  {
+    vw=vw ^ 0xffff;
+    vw=-vw-1;
+  }          
+  imu_data[1]=vw/RAW_TO_GS;//convert to g's  
+  
+  address=0x16;//use 0x00 format for hex
   vw=wiringPiI2CReadReg16(accel_address,address);   
   //convert from 2's complement     
   if(vw>0x8000)
@@ -105,14 +110,14 @@ void read_imu()
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[2]=??;//convert to g's  
+  imu_data[2]=vw/RAW_TO_GS;//convert to g's  
   
   
      
 
   //gyro reads
 
-  address=??//use 0x00 format for hex
+  address=0x02;//use 0x00 format for hex
   vw=wiringPiI2CReadReg16(gyro_address,address);   
   //convert from 2's complement          
   if(vw>0x8000)
@@ -120,9 +125,9 @@ void read_imu()
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[3]=??;//convert to degrees/sec
+  imu_data[3]=vw/RAW_TO_DEG;//convert to degrees/sec
   
-  address=??//use 0x00 format for hex
+  address=0x04;//use 0x00 format for hex
   vw=wiringPiI2CReadReg16(gyro_address,address);    
   //convert from 2's complement              
   if(vw>0x8000)
@@ -130,9 +135,9 @@ void read_imu()
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[4]=??;//convert to degrees/sec
+  imu_data[4]=vw/RAW_TO_DEG;//convert to degrees/sec
   
-  address=??//use 0x00 format for hex
+  address=0x06;//use 0x00 format for hex
   vw=wiringPiI2CReadReg16(gyro_address,address);   
   //convert from 2's complement               
   if(vw>0x8000)
@@ -140,9 +145,9 @@ void read_imu()
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[5]=??;//convert to degrees/sec  
+  imu_data[5]=vw/RAW_TO_DEG;//convert to degrees/sec  
 
-
+  printf("%10.5f %10.5f %10.5f %10.5f %10.5f %10.5f\n", imu_data[0], imu_data[1], imu_data[2], imu_data[3], imu_data[4], imu_data[5]);
 }
 
 
@@ -171,12 +176,12 @@ int setup_imu()
     printf("all i2c devices detected\n");
     sleep(1);
     wiringPiI2CWriteReg8(accel_address, 0x7d, 0x04); //power on accel    
-    wiringPiI2CWriteReg8(accel_address, ??, ??); //accel range to +_3g    
+    wiringPiI2CWriteReg8(accel_address, 0x41, 0x00); //accel range to +_3g    
     wiringPiI2CWriteReg8(accel_address, 0x40, 0x89); //high speed filtered accel
     
     wiringPiI2CWriteReg8(gyro_address, 0x11, 0x00);//power on gyro
-    wiringPiI2CWriteReg8(gyro_address, ??, ??);//set gyro to +-1000dps
-    wiringPiI2CWriteReg8(gyro_address, 0x01, 0x03);//set data rate and bandwith
+    wiringPiI2CWriteReg8(gyro_address, 0x0F, 0x01);//set gyro to +-1000dps
+    wiringPiI2CWriteReg8(gyro_address, 0x10, 0x03);//set data rate and bandwith
     
     
     sleep(1);
