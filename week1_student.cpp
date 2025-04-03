@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 
 // pitch (y axis or axis perpendicular to nose): direction of ports is + and opposite is -
-// roll
+// roll (x axis)
 //quad02
 //gcc -o week1 week_1_student.cpp -lwiringPi  -lm
 
@@ -53,6 +53,18 @@ int main (int argc, char *argv[])
   
 }
 
+void find_avg() {  // 1: x, 2:, y, 3: z
+  printf("in find avg");
+  float sum[3] = {0.0, 0.0, 0.0};
+  for (size_t i = 0; i < 1000; i++) {
+    read_imu();
+    sum[0] += imu_data[3];
+    sum[1] += imu_data[4];
+    sum[2] += imu_data[5];
+  }
+  printf("%f %f %f", sum[0]/1000, sum[1]/1000, sum[2]/1000);
+}
+
 void calibrate_imu()  // note that we calibrate the angles not, the accelerometer readings
 {
  
@@ -64,8 +76,9 @@ void calibrate_imu()  // note that we calibrate the angles not, the acceleromete
   pitch_calibration=??
   accel_z_calibration=??
   */
-printf("calibration complete, %f %f %f %f %f %f\n\r",x_gyro_calibration,y_gyro_calibration,z_gyro_calibration,roll_calibration,pitch_calibration,accel_z_calibration);
-
+// printf("calibration complete, %f %f %f %f %f %f\n\r",x_gyro_calibration,y_gyro_calibration,z_gyro_calibration,roll_calibration,pitch_calibration,accel_z_calibration);
+  printf("in calibrate_imu()");
+  find_avg();
 
 }
 
@@ -147,7 +160,7 @@ void read_imu()
   }          
   imu_data[5]=vw/RAW_TO_DEG;//convert to degrees/sec  
 
-  printf("%10.5f %10.5f %10.5f %10.5f %10.5f %10.5f\n", imu_data[0], imu_data[1], imu_data[2], imu_data[3], imu_data[4], imu_data[5]);
+  // printf("%10.5f %10.5f %10.5f %10.5f %10.5f %10.5f\n", imu_data[0], imu_data[1], imu_data[2], imu_data[3], imu_data[4], imu_data[5]);
 }
 
 
@@ -178,7 +191,7 @@ int setup_imu()
     wiringPiI2CWriteReg8(accel_address, 0x7d, 0x04); //power on accel    
     wiringPiI2CWriteReg8(accel_address, 0x41, 0x00); //accel range to +_3g    
     wiringPiI2CWriteReg8(accel_address, 0x40, 0x89); //high speed filtered accel
-    
+    printf("finished accel");
     wiringPiI2CWriteReg8(gyro_address, 0x11, 0x00);//power on gyro
     wiringPiI2CWriteReg8(gyro_address, 0x0F, 0x01);//set gyro to +-1000dps
     wiringPiI2CWriteReg8(gyro_address, 0x10, 0x03);//set data rate and bandwith
@@ -186,6 +199,7 @@ int setup_imu()
     
     sleep(1);
   }
+  printf("finished setup");
   return 0;
 }
 
