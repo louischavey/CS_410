@@ -44,41 +44,54 @@ int main (int argc, char *argv[])
 
     setup_imu();
     calibrate_imu();    
+
+    float sum[3] = {0.0, 0.0, 0.0};
     
     while(1)
     {
+
+      
+    // for (size_t i = 0; i < 1000; i++) {
+    //   read_imu();
+    //   sum[0] += imu_data[3];
+    //   sum[1] += imu_data[4];
+    // }
+    // sum[0] /= 1000.0f;
+    // sum[1] /= 1000.0f;
+    // printf("%f %f %f\n", sum[0], sum[1]);
       read_imu();    
       
     }
   
 }
 
-void find_avg() {  // 1: x, 2:, y, 3: z
-  printf("in find avg");
-  float sum[3] = {0.0, 0.0, 0.0};
-  for (size_t i = 0; i < 1000; i++) {
-    read_imu();
-    sum[0] += imu_data[3];
-    sum[1] += imu_data[4];
-    sum[2] += imu_data[5];
-  }
-  printf("%f %f %f", sum[0]/1000, sum[1]/1000, sum[2]/1000);
-}
+// void find_avg() {  // 1: x, 2:, y, 3: z
+//   printf("in find avg");
+//   float sum[3] = {0.0, 0.0, 0.0};
+//   for (size_t i = 0; i < 1000; i++) {
+//     read_imu();
+//     sum[0] += imu_data[3];
+//     sum[1] += imu_data[4];
+//     sum[2] += imu_data[5];
+//   }
+//   sum[0] /= 1000.0f;
+//   sum[1] /= 1000.0f;
+//   sum[2] /= 1000.0f;
+//   printf("%f %f %f\n", sum[0], sum[1], sum[2]);
+// }
 
 void calibrate_imu()  // note that we calibrate the angles not, the accelerometer readings
 {
  
-  /*
-  x_gyro_calibration=??
-  y_gyro_calibration=??
-  z_gyro_calibration=??
-  roll_calibration=??
-  pitch_calibration=??
-  accel_z_calibration=??
-  */
-// printf("calibration complete, %f %f %f %f %f %f\n\r",x_gyro_calibration,y_gyro_calibration,z_gyro_calibration,roll_calibration,pitch_calibration,accel_z_calibration);
-  printf("in calibrate_imu()");
-  find_avg();
+  
+  x_gyro_calibration=-0.197174;
+  y_gyro_calibration=0.236969;
+  z_gyro_calibration=0.138458;
+  roll_calibration= -0.122711;
+  pitch_calibration=0.668482;
+  // accel_z_calibration=??
+  
+  printf("calibration complete, %f %f %f %f %f %f\n\r",x_gyro_calibration,y_gyro_calibration,z_gyro_calibration,roll_calibration,pitch_calibration,accel_z_calibration);
 
 }
 
@@ -138,7 +151,7 @@ void read_imu()
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[3]=vw/RAW_TO_DEG;//convert to degrees/sec
+  imu_data[3]=(vw/RAW_TO_DEG) - x_gyro_calibration;//convert to degrees/sec
   
   address=0x04;//use 0x00 format for hex
   vw=wiringPiI2CReadReg16(gyro_address,address);    
@@ -148,7 +161,7 @@ void read_imu()
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[4]=vw/RAW_TO_DEG;//convert to degrees/sec
+  imu_data[4]=(vw/RAW_TO_DEG) - y_gyro_calibration;//convert to degrees/sec
   
   address=0x06;//use 0x00 format for hex
   vw=wiringPiI2CReadReg16(gyro_address,address);   
@@ -158,9 +171,16 @@ void read_imu()
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[5]=vw/RAW_TO_DEG;//convert to degrees/sec  
+  imu_data[5]=(vw/RAW_TO_DEG) - z_gyro_calibration;//convert to degrees/sec  
+
+  // Calculate pitch and roll
+  pitch_angle = atan2(imu_data[1], imu_data[0]) * 180.0/3.14159;
+  pitch_angle -= pitch_calibration;
+  roll_angle = atan2(imu_data[2], imu_data[0]) * 180.0/3.14159;
+  roll_angle -= roll_calibration;
 
   // printf("%10.5f %10.5f %10.5f %10.5f %10.5f %10.5f\n", imu_data[0], imu_data[1], imu_data[2], imu_data[3], imu_data[4], imu_data[5]);
+  printf("%10.5f %10.5f %10.5f %10.5f %10.5f\n", imu_data[3], imu_data[4], imu_data[5], pitch_angle, roll_angle);
 }
 
 
