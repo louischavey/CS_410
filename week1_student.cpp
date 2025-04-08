@@ -12,7 +12,8 @@
 // pitch (y axis or axis perpendicular to nose): direction of ports is + and opposite is -
 // roll (x axis)
 //quad02
-//gcc -o week1 week_1_student.cpp -lwiringPi  -lm
+// gcc -o week1_student week1_student.cpp -lwiringPi -lm
+// scp C:\Users\jarmi\CS_410\week1_student.cpp pi@10.42.0.1:/home/pi/flight_controller/week1_student.cpp
 
 
 int setup_imu();
@@ -28,7 +29,8 @@ float z_gyro_calibration=0;
 float roll_calibration=0;
 float pitch_calibration=0;
 float accel_z_calibration=0;
-float imu_data[6]; //accel xyz,  gyro xyz, 
+float imu_data[6]; //accel xyz,  gyro xyz,
+int acc_data_raw[3];// Raw acc data for debug
 long time_curr;
 long time_prev;
 struct timespec te;
@@ -45,56 +47,49 @@ int main (int argc, char *argv[])
     setup_imu();
     calibrate_imu();    
 
-    float sum[3] = {0.0, 0.0, 0.0};
-    
     while(1)
     {
-
-      
-    // for (size_t i = 0; i < 1000; i++) {
-    //   read_imu();
-    //   sum[0] += imu_data[3];
-    //   sum[1] += imu_data[4];
-    // }
-    // sum[0] /= 1000.0f;
-    // sum[1] /= 1000.0f;
-    // printf("%f %f %f\n", sum[0], sum[1]);
       read_imu();    
-      
+      printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_angle, pitch_angle);
     }
   
 }
 
-// void find_avg() {  // 1: x, 2:, y, 3: z
-//   printf("in find avg");
-//   float sum[3] = {0.0, 0.0, 0.0};
-//   for (size_t i = 0; i < 1000; i++) {
-//     read_imu();
-//     sum[0] += imu_data[3];
-//     sum[1] += imu_data[4];
-//     sum[2] += imu_data[5];
-//   }
-//   sum[0] /= 1000.0f;
-//   sum[1] /= 1000.0f;
-//   sum[2] /= 1000.0f;
-//   printf("%f %f %f\n", sum[0], sum[1], sum[2]);
-// }
-
+//
+// calibrate_imu
+//
+// Ensure gyro, roll, and pitch values are initialized to zero at
+// starting configuration of IMU
+//
 void calibrate_imu()  // note that we calibrate the angles not, the accelerometer readings
 {
- 
+  // get average stationary value over 1000 samples
+  float sum[5] = {0.0, 0.0, 0.0, 0.0, 0.0};   // gyro_x, gyro_y, gyro_z, roll, pitch
+  for (size_t i = 0; i < 1000; i++) { 
+    read_imu();
+    sum[0] += imu_data[3];
+    sum[1] += imu_data[4];
+    sum[2] += imu_data[5];
+    sum[3] += roll_angle;
+    sum[4] += pitch_angle;
+  }
   
-  x_gyro_calibration=-0.197174;
-  y_gyro_calibration=0.236969;
-  z_gyro_calibration=0.138458;
-  roll_calibration= -0.122711;
-  pitch_calibration=0.668482;
+  x_gyro_calibration = sum[0] / 1000.0f;
+  y_gyro_calibration = sum[1] / 1000.0f;
+  z_gyro_calibration = sum[2] / 1000.0f;
+  roll_calibration = sum[3] / 1000.0f;
+  pitch_calibration = sum[4] / 1000.0f;
   // accel_z_calibration=??
   
   printf("calibration complete, %f %f %f %f %f %f\n\r",x_gyro_calibration,y_gyro_calibration,z_gyro_calibration,roll_calibration,pitch_calibration,accel_z_calibration);
 
 }
 
+//
+// read_imu
+//
+// Read raw accel/gyro values, convert to units, and calculate roll, pitch angles
+//
 void read_imu()
 {
   uint8_t address=0;//todo: set address value for accel x value 
@@ -105,11 +100,13 @@ void read_imu()
   int vl=0;
   int vw=0;
 
-
-  //accel reads: x, y, z
+  //
+  // accel reads: x, y, z
+  //
 
   address=0x12;//use 0x00 format for hex
-  vw=wiringPiI2CReadReg16(accel_address,address);   
+  vw=wiringPiI2CReadReg16(accel_address,address);     // accel_x
+  acc_data_raw[0] = vw; // store raw value for debug
   //convert from 2's complement
   if(vw>0x8000)
   {
@@ -119,7 +116,8 @@ void read_imu()
   imu_data[0]=vw/RAW_TO_GS;//convert to g's 
   
   address=0x14;//use 0x00 format for hex
-  vw=wiringPiI2CReadReg16(accel_address,address);   
+  vw=wiringPiI2CReadReg16(accel_address,address);     // accel_y
+  acc_data_raw[1] = vw;
   //convert from 2's complement
   if(vw>0x8000)
   {
@@ -129,7 +127,8 @@ void read_imu()
   imu_data[1]=vw/RAW_TO_GS;//convert to g's  
   
   address=0x16;//use 0x00 format for hex
-  vw=wiringPiI2CReadReg16(accel_address,address);   
+  vw=wiringPiI2CReadReg16(accel_address,address);     // accel_z
+  acc_data_raw[2] = vw;
   //convert from 2's complement     
   if(vw>0x8000)
   {
@@ -137,53 +136,57 @@ void read_imu()
     vw=-vw-1;
   }          
   imu_data[2]=vw/RAW_TO_GS;//convert to g's  
-  
-  
      
-
-  //gyro reads
+  //
+  // gyro reads: x, y, z
+  //
 
   address=0x02;//use 0x00 format for hex
-  vw=wiringPiI2CReadReg16(gyro_address,address);   
+  vw=wiringPiI2CReadReg16(gyro_address,address);      // gyro_x
   //convert from 2's complement          
   if(vw>0x8000)
   {
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[3]=(vw/RAW_TO_DEG) - x_gyro_calibration;//convert to degrees/sec
+  imu_data[3]=(vw/RAW_TO_DEG) - x_gyro_calibration; // convert to degrees/sec
   
   address=0x04;//use 0x00 format for hex
-  vw=wiringPiI2CReadReg16(gyro_address,address);    
+  vw=wiringPiI2CReadReg16(gyro_address,address);      // gyro_y
   //convert from 2's complement              
   if(vw>0x8000)
   {
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[4]=(vw/RAW_TO_DEG) - y_gyro_calibration;//convert to degrees/sec
+  imu_data[4]=(vw/RAW_TO_DEG) - y_gyro_calibration; 
   
   address=0x06;//use 0x00 format for hex
-  vw=wiringPiI2CReadReg16(gyro_address,address);   
+  vw=wiringPiI2CReadReg16(gyro_address,address);      // gyro_z
   //convert from 2's complement               
   if(vw>0x8000)
   {
     vw=vw ^ 0xffff;
     vw=-vw-1;
   }          
-  imu_data[5]=(vw/RAW_TO_DEG) - z_gyro_calibration;//convert to degrees/sec  
+  imu_data[5]=-((vw/RAW_TO_DEG) - z_gyro_calibration); 
 
-  // Calculate pitch and roll
+  // calculate pitch and roll and convert from rad to deg
   pitch_angle = atan2(imu_data[1], imu_data[0]) * 180.0/3.14159;
   pitch_angle -= pitch_calibration;
   roll_angle = atan2(imu_data[2], imu_data[0]) * 180.0/3.14159;
   roll_angle -= roll_calibration;
 
-  // printf("%10.5f %10.5f %10.5f %10.5f %10.5f %10.5f\n", imu_data[0], imu_data[1], imu_data[2], imu_data[3], imu_data[4], imu_data[5]);
-  printf("%10.5f %10.5f %10.5f %10.5f %10.5f\n", imu_data[3], imu_data[4], imu_data[5], pitch_angle, roll_angle);
+  // printf("accx: %10.5f accy: %10.5f accz: %10.5f gyrx: %10.5f gyry: %10.5f gyrz: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[0], imu_data[1], imu_data[2], imu_data[3], imu_data[4], imu_data[5], roll_angle, pitch_angle);
+  // printf("accx_raw: %10d accy_raw: %10d accz_raw: %10d\n\r", (int)acc_data_raw[0], (int)acc_data_raw[1], (int)acc_data_raw[2]);
+  
 }
 
-
+//
+// setup_imu
+//
+// Initialize registers and I2C to prepare IMU
+//
 int setup_imu()
 {
   wiringPiSetup ();
@@ -211,7 +214,6 @@ int setup_imu()
     wiringPiI2CWriteReg8(accel_address, 0x7d, 0x04); //power on accel    
     wiringPiI2CWriteReg8(accel_address, 0x41, 0x00); //accel range to +_3g    
     wiringPiI2CWriteReg8(accel_address, 0x40, 0x89); //high speed filtered accel
-    printf("finished accel");
     wiringPiI2CWriteReg8(gyro_address, 0x11, 0x00);//power on gyro
     wiringPiI2CWriteReg8(gyro_address, 0x0F, 0x01);//set gyro to +-1000dps
     wiringPiI2CWriteReg8(gyro_address, 0x10, 0x03);//set data rate and bandwith
@@ -219,7 +221,6 @@ int setup_imu()
     
     sleep(1);
   }
-  printf("finished setup");
   return 0;
 }
 
