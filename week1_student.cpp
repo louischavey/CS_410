@@ -50,6 +50,20 @@ int iteration=0;
 #define RAW_TO_GS 10922.667
 #define RAW_TO_DEG 32.768
 #define alpha 0.02
+struct Joystick
+{
+  int key0;
+  int key1;
+  int key2;
+  int key3;
+  int pitch;
+  int roll;
+  int yaw;
+  int thrust;
+  int sequence_num;
+};
+Joystick* shared_memory;
+int run_program=1;
 
  
 int main (int argc, char *argv[])
@@ -57,9 +71,12 @@ int main (int argc, char *argv[])
 
     setup_imu();
     calibrate_imu();    
+    setup_joystick();
+    signal(SIGINT, &trap);
 
-    while(true)
+    while(run_program)
     {
+      Joystick joystick_data=*shared_memory;
       read_imu(); 
       update_filter();
       printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_accel, pitch_accel);
@@ -276,6 +293,35 @@ int setup_imu()
   }
   return 0;
 }
+
+/function to add
+void setup_joystick()
+{
+  int segment_id;
+  struct shmid_ds shmbuffer;
+  int segment_size;
+  const int shared_segment_size = 0x6400;
+  int smhkey=33222;
+
+  /* Allocate a shared memory segment. */
+  segment_id = shmget (smhkey, shared_segment_size,IPC_CREAT | 0666);
+  /* Attach the shared memory segment. */
+  shared_memory = (Joystick*) shmat (segment_id, 0, 0);
+  printf ("shared memory attached at address %p\n", shared_memory);
+  /* Determine the segment's size. */
+  shmctl (segment_id, IPC_STAT, &shmbuffer);
+  segment_size = shmbuffer.shm_segsz;
+  printf ("segment size: %d\n", segment_size);
+  /* Write a string to the shared memory segment. */
+  //sprintf (shared_memory, "test!!!!.");
+}
+//when cntrl+c pressed, kill motors
+void trap(int signal)
+{
+  printf("ending program\n\r");
+  run_program=0;
+}
+
 
 //
 // to_csv
