@@ -92,12 +92,12 @@ void update_filter()
   // integrate y-axis for roll
   roll_gyro_delta = (imu_data[4] * imu_diff);
   // integrate z-axis for pitch
+  intl_roll += roll_gyro_delta;
   pitch_gyro_delta = (imu_data[5] * imu_diff);
+  intl_pitch += pitch_gyro_delta;
   // roll = roll_accel * A + (1-A) * (roll_gyro_delta + Rollt-1)
-  intl_roll = (roll_gyro_delta + roll_filter);
-  intl_pitch = (pitch_gyro_delta + pitch_filter);
-  roll_filter = roll_accel * alpha + ((1-alpha) * intl_roll);
-  pitch_filter = pitch_accel * alpha + ((1-alpha) * intl_pitch);
+  roll_filter = roll_accel * alpha + ((1-alpha) * (roll_gyro_delta + roll_filter));
+  pitch_filter = pitch_accel * alpha + ((1-alpha) * (pitch_gyro_delta + pitch_filter));
 
   // write to data array
   filter_plot[iteration][0] = roll_accel;
