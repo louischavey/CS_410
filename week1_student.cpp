@@ -56,7 +56,7 @@ int main (int argc, char *argv[])
 {
 
     setup_imu();
-    calibrate_imu();    
+    // calibrate_imu();    
 
     while(true)
     {
