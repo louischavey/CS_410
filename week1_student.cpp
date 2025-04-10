@@ -23,6 +23,7 @@ void update_filter();
 void to_csv(float *arr, int rows, int cols);
 
 //global variables
+#define max_iters 10000  // for data collection
 int accel_address,gyro_address;
 float x_gyro_calibration=0;
 float y_gyro_calibration=0;
@@ -35,7 +36,7 @@ float roll_gyro_delta=0;
 float pitch_gyro_delta=0;
 float roll_filter=0;
 float pitch_filter=0;
-float filter_plot[1000][6];  // first 3 cols roll, second 3 are pitch
+float filter_plot[max_iters][6];  // first 3 cols roll, second 3 are pitch
 float intl_roll=0;
 float intl_pitch=0;
 int acc_data_raw[3];// Raw acc data for debug
@@ -45,11 +46,10 @@ struct timespec te;
 float yaw=0;
 float pitch_accel=0;
 float roll_accel=0;
-size_t iteration=0;
+int iteration=0;
 #define RAW_TO_GS 10922.667
 #define RAW_TO_DEG 32.768
 #define alpha 0.02
-#define max_iters
 
  
 int main (int argc, char *argv[])
@@ -70,9 +70,8 @@ int main (int argc, char *argv[])
       }
     }
     // save to csv by 
+    to_csv(&filter_plot[0][0], max_iters, 6);
 }
-
-// write_to_csv(array1, xbound, ybound)
 
 void update_filter()
 {
@@ -290,6 +289,7 @@ int setup_imu()
 void to_csv(float *arr, int rows, int cols)
 {
   // Create file
+  FILE *file;
   file = fopen("data.csv", "w");
 
   // Iterate over values
@@ -297,7 +297,7 @@ void to_csv(float *arr, int rows, int cols)
     for (int j = 0; j < cols; j++){
         fprintf(file, "%lf%s",arr[i * cols + j], (j < cols-1?",":""));    // Save data, append comma if not last value in row
     }
-    fprintf(fp1,"\n");
+    fprintf(file,"\n");
   }
-  fclose(fp1);
+  fclose(file);
 }
