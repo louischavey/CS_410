@@ -20,6 +20,7 @@ int setup_imu();
 void calibrate_imu();      
 void read_imu();    
 void update_filter();
+void to_csv(float *arr, int rows, int cols);
 
 //global variables
 int accel_address,gyro_address;
@@ -277,3 +278,26 @@ int setup_imu()
   return 0;
 }
 
+//
+// to_csv
+//
+// Save 2D array to CSV file
+// Call like: 
+//
+// int data[3][4];
+// printArray(&data[0][0], 3, 4);
+//
+void to_csv(float *arr, int rows, int cols)
+{
+  // Create file
+  file = fopen("data.csv", "w");
+
+  // Iterate over values
+  for (int i = 0; i < rows; i++){
+    for (int j = 0; j < cols; j++){
+        fprintf(file, "%lf%s",arr[i * cols + j], (j < cols-1?",":""));    // Save data, append comma if not last value in row
+    }
+    fprintf(fp1,"\n");
+  }
+  fclose(fp1);
+}
