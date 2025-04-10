@@ -30,15 +30,25 @@ float roll_calibration=0;
 float pitch_calibration=0;
 float accel_z_calibration=0;
 float imu_data[6]; //accel xyz,  gyro xyz,
+float roll_gyro_delta=0;
+float pitch_gyro_delta=0;
+float roll_filter=0;
+float pitch_filter=0;
+float filter_plot[1000][6];  // first 3 cols roll, second 3 are pitch
+float intl_roll=0;
+float intl_pitch=0;
 int acc_data_raw[3];// Raw acc data for debug
 long time_curr;
 long time_prev;
 struct timespec te;
 float yaw=0;
-float pitch_angle=0;
-float roll_angle=0;
+float pitch_accel=0;
+float roll_accel=0;
+size_t iteration=0;
 #define RAW_TO_GS 10922.667
 #define RAW_TO_DEG 32.768
+#define alpha 0.02
+#define max_iters
 
  
 int main (int argc, char *argv[])
@@ -47,12 +57,55 @@ int main (int argc, char *argv[])
     setup_imu();
     calibrate_imu();    
 
-    while(1)
+    while(true)
     {
-      read_imu();    
-      printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_angle, pitch_angle);
+      read_imu(); 
+      update_filter();
+      printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_accel, pitch_accel);
+      printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
+      iteration++;
+      if(iteration == max_iters) {
+        break;
+      }
     }
-  
+    // save to csv by 
+}
+
+// write_to_csv(array1, xbound, ybound)
+
+void update_filter()
+{
+  //get current time in nanoseconds
+  timespec_get(&te,TIME_UTC);
+  time_curr=te.tv_nsec;
+  //compute time since last execution
+  float imu_diff=time_curr-time_prev;
+  //check for rollover
+  if(imu_diff<=0)
+  {
+    imu_diff+=1000000000;
+  }
+  //convert to seconds
+  imu_diff=imu_diff/1000000000;
+  time_prev=time_curr;
+  // calculate roll_gyro_delta
+  // integrate y-axis for roll
+  roll_gyro_delta = (imu_data[4] * imu_diff);
+  // integrate z-axis for pitch
+  pitch_gyro_delta = (imu_data[5] * imu_diff);
+  // roll = roll_accel * A + (1-A) * (roll_gyro_delta + Rollt-1)
+  intl_roll = (roll_gyro_delta + roll_filter);
+  intl_pitch = (pitch_gyro_delta + pitch_filter);
+  roll_filter = roll_accel * alpha + ((1-alpha) * intl_roll);
+  pitch_filter = pitch_accel * alpha + ((1-alpha) * intl_pitch);
+
+  // write to data array
+  filter_plot[iteration][0] = roll_accel;
+  filter_plot[iteration][1] = intl_roll;
+  filter_plot[iteration][2] = roll_filter;
+  filter_plot[iteration][3] = pitch_accel;
+  filter_plot[iteration][4] = intl_pitch;
+  filter_plot[iteration][5] = pitch_filter;
 }
 
 //
@@ -70,8 +123,8 @@ void calibrate_imu()  // note that we calibrate the angles not, the acceleromete
     sum[0] += imu_data[3];
     sum[1] += imu_data[4];
     sum[2] += imu_data[5];
-    sum[3] += roll_angle;
-    sum[4] += pitch_angle;
+    sum[3] += roll_accel;
+    sum[4] += pitch_accel;
   }
   
   x_gyro_calibration = sum[0] / 1000.0f;
@@ -172,12 +225,12 @@ void read_imu()
   imu_data[5]=-((vw/RAW_TO_DEG) - z_gyro_calibration); 
 
   // calculate pitch and roll and convert from rad to deg
-  pitch_angle = atan2(imu_data[1], imu_data[0]) * 180.0/3.14159;
-  pitch_angle -= pitch_calibration;
-  roll_angle = atan2(imu_data[2], imu_data[0]) * 180.0/3.14159;
-  roll_angle -= roll_calibration;
+  pitch_accel = atan2(imu_data[1], imu_data[0]) * 180.0/3.14159;
+  pitch_accel -= pitch_calibration;
+  roll_accel = atan2(imu_data[2], imu_data[0]) * 180.0/3.14159;
+  roll_accel -= roll_calibration;
 
-  // printf("accx: %10.5f accy: %10.5f accz: %10.5f gyrx: %10.5f gyry: %10.5f gyrz: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[0], imu_data[1], imu_data[2], imu_data[3], imu_data[4], imu_data[5], roll_angle, pitch_angle);
+  // printf("accx: %10.5f accy: %10.5f accz: %10.5f gyrx: %10.5f gyry: %10.5f gyrz: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[0], imu_data[1], imu_data[2], imu_data[3], imu_data[4], imu_data[5], roll_accel, pitch_accel);
   // printf("accx_raw: %10d accy_raw: %10d accz_raw: %10d\n\r", (int)acc_data_raw[0], (int)acc_data_raw[1], (int)acc_data_raw[2]);
   
 }
@@ -223,5 +276,4 @@ int setup_imu()
   }
   return 0;
 }
-
 
