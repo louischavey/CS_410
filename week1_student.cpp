@@ -9,21 +9,45 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 
+#define RAW_TO_GS 10922.667
+#define RAW_TO_DEG 32.768
+#define ALPHA 0.02
+#define ROLL_BOUND 45
+#define PITCH_BOUND 45
+#define GYRO_BOUND 300
+#define TIMEOUT 0.35
+#define MAX_ITERS 10000  // for data collection
+
 // pitch (y axis or axis perpendicular to nose): direction of ports is + and opposite is -
 // roll (x axis)
 //quad02
 // gcc -o week1_student week1_student.cpp -lwiringPi -lm
 // scp C:\Users\jarmi\CS_410\week1_student.cpp pi@10.42.0.1:/home/pi/flight_controller/week1_student.cpp
 
+struct Joystick   // struct to hold joystick data
+{
+  int key0;       // A
+  int key1;       // B
+  int key2;       // X
+  int key3;       // Y
+  int pitch;
+  int roll;
+  int yaw;
+  int thrust;
+  int sequence_num;
+};
 
-int setup_imu();
+
+int check_end_conditions(Joystick joystick_data, long tstart);
 void calibrate_imu();      
 void read_imu();    
 void update_filter();
 void to_csv(float *arr, int rows, int cols);
+int setup_imu();
+void setup_joystick();
+void trap(int signal);
 
 //global variables
-#define max_iters 10000  // for data collection
 int accel_address,gyro_address;
 float x_gyro_calibration=0;
 float y_gyro_calibration=0;
@@ -36,7 +60,7 @@ float roll_gyro_delta=0;
 float pitch_gyro_delta=0;
 float roll_filter=0;
 float pitch_filter=0;
-float filter_plot[max_iters][6];  // first 3 cols roll, second 3 are pitch
+float filter_plot[MAX_ITERS][6];  // first 3 cols roll, second 3 are pitch
 float intl_roll=0;
 float intl_pitch=0;
 int acc_data_raw[3];// Raw acc data for debug
@@ -47,49 +71,95 @@ float yaw=0;
 float pitch_accel=0;
 float roll_accel=0;
 int iteration=0;
-#define RAW_TO_GS 10922.667
-#define RAW_TO_DEG 32.768
-#define alpha 0.02
-struct Joystick
-{
-  int key0;
-  int key1;
-  int key2;
-  int key3;
-  int pitch;
-  int roll;
-  int yaw;
-  int thrust;
-  int sequence_num;
-};
 Joystick* shared_memory;
 int run_program=1;
 
  
 int main (int argc, char *argv[])
 {
-
+    // Setup peripherals
     setup_imu();
     calibrate_imu();    
     setup_joystick();
     signal(SIGINT, &trap);
 
+    // Variables for controller timeout
+    int prev_seq_num = shared_memory->sequence_num;
+    long timeout_start;
+
     while(run_program)
     {
+      // Get most recent joystick data
       Joystick joystick_data=*shared_memory;
+
+      // If sequence number has changed, restart timeout
+      if (joystick_data.sequence_num != prev_seq_num) {
+        // get current time in seconds
+        timespec_get(&te,TIME_UTC);
+        timeout_start=te.tv_sec;
+      }
+
+      // Read and filter IMU data
       read_imu(); 
       update_filter();
-      printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_accel, pitch_accel);
-      printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
-      iteration++;
-      if(iteration == max_iters) {
-        break;
-      }
+
+      printf("0: %10d 1: %10d 2: %10d 3: %10d pitch: %10d roll: %10d yaw: %10d thrust: %10d seq_num: %10d\n\r", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3, joystick_data.pitch, joystick_data.roll, joystick_data.yaw, joystick_data.thrust, joystick_data.sequence_num);
+      // printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_accel, pitch_accel);
+      // printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
+
+      run_program = check_end_conditions(joystick_data, timeout_start);
     }
-    // save to csv by 
-    to_csv(&filter_plot[0][0], max_iters, 6);
+
+    return 0;
 }
 
+//
+// check_end_conditions
+//
+// Check all stopping conditions, and exit if any are true. Report
+// reason why before exiting.
+//
+int check_end_conditions(Joystick joystick_data, long tstart) {
+  if(fabs(imu_data[3] > GYRO_BOUND) || fabs(imu_data[4] > GYRO_BOUND) || fabs(imu_data[5] > GYRO_BOUND)) {     // gyro speed out of bounds
+    printf("EXIT: gyro speed out of safe bounds (+/- %d deg/sec)\n\r", GYRO_BOUND);
+    return 0;
+  }
+
+  if (fabs(roll_filter) > ROLL_BOUND) {                     // roll angle out of bounds
+    printf("EXIT: roll angle out of safe bounds (+/- %d deg)\n\r", ROLL_BOUND);
+    return 0;
+  }
+
+  if (fabs(pitch_filter) > PITCH_BOUND) {                    // pitch angle out of bounds
+    printf("EXIT: pitch angle out of bounds (+/- %d deg)\n\r", PITCH_BOUND);
+    return 0;
+  }
+
+  if(joystick_data.key1) {                          // manual exit (B button)
+    printf("EXIT: manual exit (B button)\n\r");
+    return 0;
+  }
+
+  // get current time in seconds
+  timespec_get(&te,TIME_UTC);
+  long tcurr = te.tv_sec;
+  // if (tcurr - tstart >= TIMEOUT) {                  // controller timeout (if sequence number hasn't change for TIMEOUT seconds)
+  //   printf("EXIT: controller timeout (%f seconds)\n\r", TIMEOUT);
+  //   return 0;
+  // }
+
+  return run_program;   // return 'run_program' instead of '1' to detect ctrl-c force quit
+}
+
+//////////////////////////////////////////////
+// IMU Functions
+//////////////////////////////////////////////
+
+//
+// update_filter
+//
+// Update pitch and roll filters for an accurate and noise free measurement
+//
 void update_filter()
 {
   //get current time in nanoseconds
@@ -113,8 +183,8 @@ void update_filter()
   pitch_gyro_delta = (imu_data[5] * imu_diff);
   intl_pitch += pitch_gyro_delta;
   // roll = roll_accel * A + (1-A) * (roll_gyro_delta + Rollt-1)
-  roll_filter = roll_accel * alpha + ((1-alpha) * (roll_gyro_delta + roll_filter));
-  pitch_filter = pitch_accel * alpha + ((1-alpha) * (pitch_gyro_delta + pitch_filter));
+  roll_filter = roll_accel * ALPHA + ((1-ALPHA) * (roll_gyro_delta + roll_filter));
+  pitch_filter = pitch_accel * ALPHA + ((1-ALPHA) * (pitch_gyro_delta + pitch_filter));
 
   // write to data array
   filter_plot[iteration][0] = roll_accel;
@@ -252,6 +322,10 @@ void read_imu()
   
 }
 
+//////////////////////////////////////////////
+// Setup Functions
+//////////////////////////////////////////////
+
 //
 // setup_imu
 //
@@ -294,7 +368,11 @@ int setup_imu()
   return 0;
 }
 
-/function to add
+//
+// setup_joystick
+//
+// Set up joystick shared memory
+//
 void setup_joystick()
 {
   int segment_id;
@@ -315,13 +393,21 @@ void setup_joystick()
   /* Write a string to the shared memory segment. */
   //sprintf (shared_memory, "test!!!!.");
 }
-//when cntrl+c pressed, kill motors
+
+//
+// trap
+//
+// When cntrl+c pressed, kill motors
+//
 void trap(int signal)
 {
-  printf("ending program\n\r");
+  printf("EXIT: force quit\n\r");
   run_program=0;
 }
 
+//////////////////////////////////////////////
+// Helper Functions
+//////////////////////////////////////////////
 
 //
 // to_csv
