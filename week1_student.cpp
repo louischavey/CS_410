@@ -22,6 +22,7 @@
 // roll (x axis)
 //quad02
 // gcc -o week1_student week1_student.cpp -lwiringPi -lm
+// gcc -o udp_rx udp_rx.cpp -lwiringPi -lm
 // scp C:\Users\jarmi\CS_410\week1_student.cpp pi@10.42.0.1:/home/pi/flight_controller/week1_student.cpp
 
 struct Joystick   // struct to hold joystick data
@@ -143,10 +144,10 @@ int check_end_conditions(Joystick joystick_data, long tstart) {
   // get current time in seconds
   timespec_get(&te,TIME_UTC);
   long tcurr = te.tv_sec;
-  // if (tcurr - tstart >= TIMEOUT) {                  // controller timeout (if sequence number hasn't change for TIMEOUT seconds)
-  //   printf("EXIT: controller timeout (%f seconds)\n\r", TIMEOUT);
-  //   return 0;
-  // }
+  if (tcurr - tstart >= TIMEOUT) {                  // controller timeout (if sequence number hasn't change for TIMEOUT seconds)
+    printf("EXIT: controller timeout (%f seconds)\n\r", TIMEOUT);
+    return 0;
+  }
 
   return run_program;   // return 'run_program' instead of '1' to detect ctrl-c force quit
 }
