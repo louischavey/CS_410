@@ -38,8 +38,8 @@ struct Joystick   // struct to hold joystick data
   int sequence_num;
 };
 
-
-int check_end_conditions(Joystick joystick_data, long tstart);
+double timespec_diff_sec(struct timespec start, struct timespec end);
+int check_end_conditions(Joystick joystick_data, struct timespec tstart);
 void calibrate_imu();      
 void read_imu();    
 void update_filter();
@@ -86,7 +86,8 @@ int main (int argc, char *argv[])
 
     // Variables for controller timeout
     int prev_seq_num = shared_memory->sequence_num;
-    long timeout_start;
+    struct timespec timeout_start;
+    timespec_get(&timeout_start, TIME_UTC);
 
     while(run_program)
     {
@@ -96,15 +97,16 @@ int main (int argc, char *argv[])
       // If sequence number has changed, restart timeout
       if (joystick_data.sequence_num != prev_seq_num) {
         // get current time in seconds
-        timespec_get(&te,TIME_UTC);
-        timeout_start=te.tv_sec;
+        timespec_get(&timeout_start,TIME_UTC);
+        prev_seq_num = joystick_data.sequence_num;
       }
 
       // Read and filter IMU data
       read_imu(); 
       update_filter();
 
-      printf("0: %10d 1: %10d 2: %10d 3: %10d pitch: %10d roll: %10d yaw: %10d thrust: %10d seq_num: %10d\n\r", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3, joystick_data.pitch, joystick_data.roll, joystick_data.yaw, joystick_data.thrust, joystick_data.sequence_num);
+      // printf("0: %10d 1: %10d 2: %10d 3: %10d pitch: %10d roll: %10d yaw: %10d thrust: %10d seq_num: %10d\n\r", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3, joystick_data.pitch, joystick_data.roll, joystick_data.yaw, joystick_data.thrust, joystick_data.sequence_num);
+      // printf("prev: %10d current: %10d\n\r", prev_seq_num, joystick_data.sequence_num);
       // printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_accel, pitch_accel);
       // printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
 
@@ -114,14 +116,19 @@ int main (int argc, char *argv[])
     return 0;
 }
 
+// Compute difference in seconds between two timespecs
+double timespec_diff_sec(struct timespec start, struct timespec end) {
+  return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+}
+
 //
 // check_end_conditions
 //
 // Check all stopping conditions, and exit if any are true. Report
 // reason why before exiting.
 //
-int check_end_conditions(Joystick joystick_data, long tstart) {
-  if(fabs(imu_data[3] > GYRO_BOUND) || fabs(imu_data[4] > GYRO_BOUND) || fabs(imu_data[5] > GYRO_BOUND)) {     // gyro speed out of bounds
+int check_end_conditions(Joystick joystick_data, struct timespec tstart) {
+  if(fabs(imu_data[3]) > GYRO_BOUND || fabs(imu_data[4]) > GYRO_BOUND || fabs(imu_data[5]) > GYRO_BOUND) {     // gyro speed out of bounds
     printf("EXIT: gyro speed out of safe bounds (+/- %d deg/sec)\n\r", GYRO_BOUND);
     return 0;
   }
@@ -142,9 +149,12 @@ int check_end_conditions(Joystick joystick_data, long tstart) {
   }
 
   // get current time in seconds
-  timespec_get(&te,TIME_UTC);
-  long tcurr = te.tv_sec;
-  if (tcurr - tstart >= TIMEOUT) {                  // controller timeout (if sequence number hasn't change for TIMEOUT seconds)
+  struct timespec tcurr;
+  timespec_get(&tcurr, TIME_UTC);
+  double elapsed = timespec_diff_sec(tstart, tcurr);
+  printf("Elapsed: %.3f sec\n\r", elapsed);
+
+  if (elapsed >= TIMEOUT) {                  // controller timeout (if sequence number hasn't change for TIMEOUT seconds)
     printf("EXIT: controller timeout (%f seconds)\n\r", TIMEOUT);
     return 0;
   }
