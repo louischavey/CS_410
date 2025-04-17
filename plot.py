@@ -6,19 +6,23 @@ def main():
     axis = 'pitch'
     filename = f'{axis}_data.csv'
     df = pd.read_csv(filename)
-    accel = np.array(df.iloc[:,3])
-    intl = np.array(df.iloc[:,4])
-    filter = np.array(df.iloc[:,5])
-    t = np.linspace(0, len(accel)-1, len(accel))
+    pitchx10 = np.array(df.iloc[:,0])
+    desired_pitchx10 = np.array(df.iloc[:,1])
+    thrust = np.array(df.iloc[:,2])
+    motor_front = np.array(df.iloc[:,3])
+    motor_back = np.array(df.iloc[:,4])
+    t = np.linspace(0, len(pitchx10)-1, len(pitchx10))
 
     
 
     plt.figure(figsize=(10, 5))
-    plt.plot(t, accel, color='blue', label=f'accel_{axis}')
-    plt.plot(t, intl, color='red', label=f'intl_{axis}')
-    plt.plot(t, filter, color='yellow', label=f'filter_{axis}')
+    plt.plot(t, pitchx10, color='blue', label=f'PitchX10')
+    plt.plot(t, desired_pitchx10, color='orange', label=f'desired Pitch X 10')
+    plt.plot(t, thrust, color='green', label=f'Thrust')
+    plt.plot(t, motor_front, color='cyan', label=f'Motor_front')
+    plt.plot(t, motor_back, color='purple', label=f'Motor_back')
     plt.legend()
-    plt.savefig(f'{axis}_plot.png')
+    plt.savefig(f'pitch_proportional.png')
 
     return
 
