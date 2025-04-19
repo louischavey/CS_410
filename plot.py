@@ -24,7 +24,7 @@ def main():
     plt.plot(t, motor_front, color='cyan', label=f'Motor_front')
     plt.plot(t, motor_back, color='purple', label=f'Motor_back')
     plt.legend()
-    plt.savefig(f'pitch_integral.png')
+    plt.savefig(f'pitch_PID.png')
 
     return
 
