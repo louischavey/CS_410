@@ -9,14 +9,6 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 
-#define RAW_TO_GS 10922.667
-#define RAW_TO_DEG 32.768
-#define ALPHA 0.02
-#define ROLL_BOUND 45
-#define PITCH_BOUND 45
-#define GYRO_BOUND 300
-#define TIMEOUT 0.35
-#define MAX_ITERS 10000  // for data collection
 
 // pitch (y axis or axis perpendicular to nose): direction of ports is + and opposite is -
 // roll (x axis)
@@ -38,6 +30,7 @@ struct Joystick   // struct to hold joystick data
   int sequence_num;
 };
 
+void set_motors();
 double timespec_diff_sec(struct timespec start, struct timespec end);
 int check_end_conditions(Joystick joystick_data, struct timespec tstart);
 void calibrate_imu();      
@@ -48,7 +41,11 @@ int setup_imu();
 void setup_joystick();
 void trap(int signal);
 
-//global variables
+//////////////////////////////////////////////
+// Global Variables and Constants
+//////////////////////////////////////////////
+
+// IMU Reading
 int accel_address,gyro_address;
 float x_gyro_calibration=0;
 float y_gyro_calibration=0;
@@ -57,24 +54,50 @@ float roll_calibration=0;
 float pitch_calibration=0;
 float accel_z_calibration=0;
 float imu_data[6]; //accel xyz,  gyro xyz,
+int acc_data_raw[3];// Raw acc data for debug
+#define RAW_TO_GS 10922.667
+#define RAW_TO_DEG 32.768
+
+// IMU Filtering
+#define ALPHA 0.02
 float roll_gyro_delta=0;
 float pitch_gyro_delta=0;
 float roll_filter=0;
 float pitch_filter=0;
-float filter_plot[MAX_ITERS][6];  // first 3 cols roll, second 3 are pitch
 float intl_roll=0;
 float intl_pitch=0;
-int acc_data_raw[3];// Raw acc data for debug
+
+// Data Plotting
+#define MAX_ITERS 25000  // for data collection
+float plot_data[MAX_ITERS][5];  // first 3 cols roll, second 3 are pitch
+int iteration=0;
+
+// Joystick and Safety Bounds
 long time_curr;
 long time_prev;
 struct timespec te;
 float yaw=0;
 float pitch_accel=0;
 float roll_accel=0;
-int iteration=0;
 Joystick* shared_memory;
+Joystick joystick_data;
 int run_program=1;
+#define ROLL_BOUND 45
+#define PITCH_BOUND 45
+#define GYRO_BOUND 300
+#define TIMEOUT 0.5
 
+// PID Control
+int motor_commands[4];  // hold commanded motor speeds based on PID control
+#define THRUST_NEUTRAL 100
+#define THRUST_AMP 100
+int thrust=THRUST_NEUTRAL;
+#define PITCH_AMP 10
+#define PGAIN 10
+
+//////////////////////////////////////////////
+// Main
+//////////////////////////////////////////////
  
 int main (int argc, char *argv[])
 {
@@ -91,8 +114,9 @@ int main (int argc, char *argv[])
 
     while(run_program)
     {
+      printf("%d\n\r", iteration);
       // Get most recent joystick data
-      Joystick joystick_data=*shared_memory;
+      joystick_data = *shared_memory;
 
       // If sequence number has changed, restart timeout
       if (joystick_data.sequence_num != prev_seq_num) {
@@ -101,25 +125,68 @@ int main (int argc, char *argv[])
         prev_seq_num = joystick_data.sequence_num;
       }
 
-      // Read and filter IMU data
+      // Read, filter IMU data and check safety conditions
       read_imu(); 
       update_filter();
+      run_program = check_end_conditions(joystick_data, timeout_start);
 
       // printf("0: %10d 1: %10d 2: %10d 3: %10d pitch: %10d roll: %10d yaw: %10d thrust: %10d seq_num: %10d\n\r", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3, joystick_data.pitch, joystick_data.roll, joystick_data.yaw, joystick_data.thrust, joystick_data.sequence_num);
       // printf("prev: %10d current: %10d\n\r", prev_seq_num, joystick_data.sequence_num);
       // printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_accel, pitch_accel);
       // printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
 
-      run_program = check_end_conditions(joystick_data, timeout_start);
+      set_motors();  // set motor speeds based on PID control
+
+      if (iteration == MAX_ITERS) {break;}
+      iteration++;
     }
+
+    // to_csv(&plot_data[0][0], MAX_ITERS, 5);
 
     return 0;
 }
 
-// Compute difference in seconds between two timespecs
-double timespec_diff_sec(struct timespec start, struct timespec end) {
-  return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+//////////////////////////////////////////////
+// Control Functions
+//////////////////////////////////////////////
+
+//
+// set_motors
+//
+// Compute thrust and set motor values with PID control
+//
+void set_motors() {
+  // Set thrust
+  float thrust_mult = (-1 * (joystick_data.thrust - 128)) / 128.0f;
+  thrust = (int)((float)THRUST_NEUTRAL + (thrust_mult * THRUST_AMP));
+  // printf("mult: %10.3f thrust: %10d\n\r", mult, thrust);
+
+  // Pitch error = joystick_pitch - filter_pitch
+  float pitch_mult = ((float)joystick_data.pitch - 128.0f) / 128.0f;
+  float pitch_desired = ((float)PITCH_AMP) * pitch_mult;
+  float pitch_error = (float)pitch_desired - pitch_filter;
+  // printf("mult: %10.3f desired: %10.5f filt_pitch: %10.5f error: %10.5f\n\r", pitch_mult, pitch_desired, pitch_filter, pitch_error);
+
+  // Update motors
+  motor_commands[0] = thrust + (int)(PGAIN * pitch_error);   // front left
+  motor_commands[1] = thrust - (int)(PGAIN * pitch_error);   // back left
+  motor_commands[2] = thrust + (int)(PGAIN * pitch_error);   // front right
+  motor_commands[3] = thrust - (int)(PGAIN * pitch_error);   // back right
+
+  // write to data array
+  // plot_data[iteration][0] = pitch_filter * 10.0f;
+  // plot_data[iteration][1] = pitch_desired * 10.0f;
+  // plot_data[iteration][2] = thrust;
+  // plot_data[iteration][3] = motor_commands[0];
+  // plot_data[iteration][4] = motor_commands[1];
+  printf("%f %f %d %d %d", pitch_filter * 10.0f, pitch_desired * 10.0f, thrust, motor_commands[0], motor_commands[1]);
+
 }
+
+
+//////////////////////////////////////////////
+// IMU Functions
+//////////////////////////////////////////////
 
 //
 // check_end_conditions
@@ -152,7 +219,7 @@ int check_end_conditions(Joystick joystick_data, struct timespec tstart) {
   struct timespec tcurr;
   timespec_get(&tcurr, TIME_UTC);
   double elapsed = timespec_diff_sec(tstart, tcurr);
-  printf("Elapsed: %.3f sec\n\r", elapsed);
+  // printf("Elapsed: %.3f sec Seq_num: %10d\n\r", elapsed, joystick_data.sequence_num);
 
   if (elapsed >= TIMEOUT) {                  // controller timeout (if sequence number hasn't change for TIMEOUT seconds)
     printf("EXIT: controller timeout (%f seconds)\n\r", TIMEOUT);
@@ -161,10 +228,6 @@ int check_end_conditions(Joystick joystick_data, struct timespec tstart) {
 
   return run_program;   // return 'run_program' instead of '1' to detect ctrl-c force quit
 }
-
-//////////////////////////////////////////////
-// IMU Functions
-//////////////////////////////////////////////
 
 //
 // update_filter
@@ -198,12 +261,12 @@ void update_filter()
   pitch_filter = pitch_accel * ALPHA + ((1-ALPHA) * (pitch_gyro_delta + pitch_filter));
 
   // write to data array
-  filter_plot[iteration][0] = roll_accel;
-  filter_plot[iteration][1] = intl_roll;
-  filter_plot[iteration][2] = roll_filter;
-  filter_plot[iteration][3] = pitch_accel;
-  filter_plot[iteration][4] = intl_pitch;
-  filter_plot[iteration][5] = pitch_filter;
+  // plot_data[iteration][0] = roll_accel;
+  // plot_data[iteration][1] = intl_roll;
+  // plot_data[iteration][2] = roll_filter;
+  // plot_data[iteration][3] = pitch_accel;
+  // plot_data[iteration][4] = intl_pitch;
+  // plot_data[iteration][5] = pitch_filter;
 }
 
 //
@@ -434,13 +497,22 @@ void to_csv(float *arr, int rows, int cols)
   // Create file
   FILE *file;
   file = fopen("data.csv", "w");
+  if (!file) {
+    perror("fopen");
+    return;
+  }
 
   // Iterate over values
   for (int i = 0; i < rows; i++){
     for (int j = 0; j < cols; j++){
-        fprintf(file, "%lf%s",arr[i * cols + j], (j < cols-1?",":""));    // Save data, append comma if not last value in row
+        fprintf(file, "%f%s",arr[i * cols + j], (j < cols-1?",":""));    // Save data, append comma if not last value in row
     }
     fprintf(file,"\n");
   }
   fclose(file);
+}
+
+// Compute difference in seconds between two timespecs
+double timespec_diff_sec(struct timespec start, struct timespec end) {
+  return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 }
