@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 def main():
     axis = 'pitch'
-    filename = f'pitch_proportional_data.csv'
+    filename = f'data.csv'
     df = pd.read_csv(filename)
     df = df.dropna()
     # breakpoint()
@@ -18,13 +18,13 @@ def main():
     
 
     plt.figure(figsize=(10, 5))
-    plt.plot(t, pitchx10, color='blue', label=f'PitchX10')
-    plt.plot(t, desired_pitchx10, color='orange', label=f'desired Pitch X 10')
+    plt.plot(t, pitchx10, color='blue', label=f'pitch')
+    plt.plot(t, desired_pitchx10, color='orange', label=f'desired Pitch')
     plt.plot(t, thrust, color='green', label=f'Thrust')
     plt.plot(t, motor_front, color='cyan', label=f'Motor_front')
     plt.plot(t, motor_back, color='purple', label=f'Motor_back')
     plt.legend()
-    plt.savefig(f'pitch_proportional.png')
+    plt.savefig(f'pitch_integral.png')
 
     return
 
