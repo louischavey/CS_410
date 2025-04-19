@@ -68,7 +68,7 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-#define MAX_ITERS 25000  // for data collection
+#define MAX_ITERS 20000  // for data collection
 float plot_data[MAX_ITERS][5];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
@@ -93,7 +93,8 @@ int motor_commands[4];  // hold commanded motor speeds based on PID control
 #define THRUST_AMP 100
 int thrust=THRUST_NEUTRAL;
 #define PITCH_AMP 10
-#define PGAIN 10
+#define PGAIN 0    // PGAIN = 10
+#define DGAIN 1.0  // DGAIN = 1.0
 
 //////////////////////////////////////////////
 // Main
@@ -133,7 +134,7 @@ int main (int argc, char *argv[])
 
       // printf("0: %10d 1: %10d 2: %10d 3: %10d pitch: %10d roll: %10d yaw: %10d thrust: %10d seq_num: %10d\n\r", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3, joystick_data.pitch, joystick_data.roll, joystick_data.yaw, joystick_data.thrust, joystick_data.sequence_num);
       // printf("prev: %10d current: %10d\n\r", prev_seq_num, joystick_data.sequence_num);
-      // printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_accel, pitch_accel);
+      // printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_filter, pitch_filter);
       // printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
 
       set_motors();  // set motor speeds based on PID control
@@ -167,18 +168,18 @@ void set_motors() {
   // printf("mult: %10.3f desired: %10.5f filt_pitch: %10.5f error: %10.5f\n\r", pitch_mult, pitch_desired, pitch_filter, pitch_error);
 
   // Update motors
-  motor_commands[0] = thrust + (int)(PGAIN * pitch_error);   // front left
-  motor_commands[1] = thrust - (int)(PGAIN * pitch_error);   // back left
-  motor_commands[2] = thrust + (int)(PGAIN * pitch_error);   // front right
-  motor_commands[3] = thrust - (int)(PGAIN * pitch_error);   // back right
+  motor_commands[0] = thrust + (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]);   // front left
+  motor_commands[1] = thrust - (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]);   // back left
+  motor_commands[2] = thrust + (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]);   // front right
+  motor_commands[3] = thrust - (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]);   // back right
 
   // write to data array
   plot_data[iteration][0] = pitch_filter * 10.0f;
-  plot_data[iteration][1] = pitch_desired * 10.0f;
+  plot_data[iteration][1] = imu_data[5];
   plot_data[iteration][2] = thrust;
   plot_data[iteration][3] = motor_commands[0];
   plot_data[iteration][4] = motor_commands[1];
-  printf("%d %f %f %d %d %d", iteration, pitch_filter * 10.0f, pitch_desired * 10.0f, thrust, motor_commands[0], motor_commands[1]);
+  printf("%d %f %f %d %d %d\n\r", iteration, pitch_filter * 10.0f, imu_data[5], thrust, motor_commands[0], motor_commands[1]);
 
 }
 
