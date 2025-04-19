@@ -114,6 +114,7 @@ int main (int argc, char *argv[])
 
     while(run_program)
     {
+      if (iteration == MAX_ITERS) {break;}
       printf("%d\n\r", iteration);
       // Get most recent joystick data
       joystick_data = *shared_memory;
@@ -136,12 +137,10 @@ int main (int argc, char *argv[])
       // printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
 
       set_motors();  // set motor speeds based on PID control
-
-      if (iteration == MAX_ITERS) {break;}
       iteration++;
     }
 
-    // to_csv(&plot_data[0][0], MAX_ITERS, 5);
+    to_csv(&plot_data[0][0], MAX_ITERS, 5);
 
     return 0;
 }
@@ -174,12 +173,12 @@ void set_motors() {
   motor_commands[3] = thrust - (int)(PGAIN * pitch_error);   // back right
 
   // write to data array
-  // plot_data[iteration][0] = pitch_filter * 10.0f;
-  // plot_data[iteration][1] = pitch_desired * 10.0f;
-  // plot_data[iteration][2] = thrust;
-  // plot_data[iteration][3] = motor_commands[0];
-  // plot_data[iteration][4] = motor_commands[1];
-  printf("%f %f %d %d %d", pitch_filter * 10.0f, pitch_desired * 10.0f, thrust, motor_commands[0], motor_commands[1]);
+  plot_data[iteration][0] = pitch_filter * 10.0f;
+  plot_data[iteration][1] = pitch_desired * 10.0f;
+  plot_data[iteration][2] = thrust;
+  plot_data[iteration][3] = motor_commands[0];
+  plot_data[iteration][4] = motor_commands[1];
+  printf("%d %f %f %d %d %d", iteration, pitch_filter * 10.0f, pitch_desired * 10.0f, thrust, motor_commands[0], motor_commands[1]);
 
 }
 
