@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 def main():
     axis = 'pitch'
-    filename = f'data.csv'
+    filename = f'pitch_proportional_data.csv'
     df = pd.read_csv(filename)
     df = df.dropna()
     # breakpoint()
