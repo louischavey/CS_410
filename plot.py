@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 
 def main():
     axis = 'pitch'
-    filename = f'{axis}_data.csv'
+    filename = f'data.csv'
     df = pd.read_csv(filename)
+    df = df.dropna()
+    # breakpoint()
     pitchx10 = np.array(df.iloc[:,0])
     desired_pitchx10 = np.array(df.iloc[:,1])
     thrust = np.array(df.iloc[:,2])
