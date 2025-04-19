@@ -17,6 +17,10 @@
 // gcc -o udp_rx udp_rx.cpp -lwiringPi -lm
 // scp C:\Users\jarmi\CS_410\week1_student.cpp pi@10.42.0.1:/home/pi/flight_controller/week1_student.cpp
 
+//////////////////////////////////////////////
+// Function Prototypes and Structs
+//////////////////////////////////////////////
+
 struct Joystick   // struct to hold joystick data
 {
   int key0;       // A
@@ -93,10 +97,10 @@ int motor_commands[4];  // hold commanded motor speeds based on PID control
 #define THRUST_AMP 100
 int thrust=THRUST_NEUTRAL;
 #define PITCH_AMP 10
-#define PGAIN 0    // PGAIN = 10
-float integral = 0.0;
-#define DGAIN 0  // DGAIN = 1.0
+#define PGAIN 10    // PGAIN = 10
+#define DGAIN 1.0  // DGAIN = 1.0
 #define IGAIN 0.1  // IGAIN = 0.1
+float integral = 0.0;
 #define ISATURATE 100
 
 //////////////////////////////////////////////
@@ -182,12 +186,12 @@ void set_motors() {
   motor_commands[3] = thrust - (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]) - (int)(integral);   // back right
 
   // write to data array
-  plot_data[iteration][0] = pitch_filter * 10.0f;
-  plot_data[iteration][1] = pitch_desired * 10.0f;
+  plot_data[iteration][0] = pitch_filter;
+  plot_data[iteration][1] = pitch_desired;
   plot_data[iteration][2] = thrust;
   plot_data[iteration][3] = motor_commands[0];
   plot_data[iteration][4] = motor_commands[1];
-  printf("%d %f %f %d %d %d\n\r", iteration, pitch_filter * 10.0f, pitch_desired * 10.0f, thrust, motor_commands[0], motor_commands[1]);
+  printf("%d %f %f %d %d %d\n\r", iteration, pitch_filter, pitch_desired, thrust, motor_commands[0], motor_commands[1]);
 
 }
 
