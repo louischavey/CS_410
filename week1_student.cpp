@@ -180,10 +180,10 @@ void set_motors() {
   else if (integral < -ISATURATE) {integral = -ISATURATE;}
 
   // Update motors
-  motor_commands[0] = thrust + (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]) + (int)(integral);   // front left
-  motor_commands[1] = thrust - (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]) - (int)(integral);   // back left
-  motor_commands[2] = thrust + (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]) + (int)(integral);   // front right
-  motor_commands[3] = thrust - (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]) - (int)(integral);   // back right
+  motor_commands[0] = thrust + (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]) + (int)(integral);   // front left
+  motor_commands[1] = thrust - (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]) - (int)(integral);   // back left
+  motor_commands[2] = thrust + (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]) + (int)(integral);   // front right
+  motor_commands[3] = thrust - (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]) - (int)(integral);   // back right
 
   // write to data array
   plot_data[iteration][0] = pitch_filter;
@@ -191,6 +191,11 @@ void set_motors() {
   plot_data[iteration][2] = thrust;
   plot_data[iteration][3] = motor_commands[0];
   plot_data[iteration][4] = motor_commands[1];
+  // plot_data[iteration][0] = pitch_filter;
+  // plot_data[iteration][1] = imu_data[5];
+  // plot_data[iteration][2] = thrust;
+  // plot_data[iteration][3] = motor_commands[0];
+  // plot_data[iteration][4] = motor_commands[1];
   printf("%d %f %f %d %d %d\n\r", iteration, pitch_filter, pitch_desired, thrust, motor_commands[0], motor_commands[1]);
 
 }
