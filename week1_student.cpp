@@ -76,8 +76,8 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-#define MAX_ITERS 5000  // for data collection
-#define PLOT_COLS 5
+#define MAX_ITERS 2000  // for data collection
+#define PLOT_COLS 6
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
@@ -204,11 +204,12 @@ void calc_pid() {
   }
 
   // write to data array
-  plot_data[iteration][0] = pitch_filter;
-  plot_data[iteration][1] = motor_commands[0];
-  plot_data[iteration][2] = motor_commands[1];
-  plot_data[iteration][3] = motor_commands[2];
-  plot_data[iteration][4] = motor_commands[3];
+  plot_data[iteration][0] = pitch_accel;
+  plot_data[iteration][1] = pitch_filter;
+  plot_data[iteration][2] = motor_commands[0];
+  plot_data[iteration][3] = motor_commands[1];
+  plot_data[iteration][4] = motor_commands[2];
+  plot_data[iteration][5] = motor_commands[3];
 
   printf("pitch: %f motor_front: %d motor_back: %d\n\r", pitch_filter, motor_commands[0], motor_commands[1]);
 
@@ -365,14 +366,6 @@ void update_filter()
   // roll = roll_accel * A + (1-A) * (roll_gyro_delta + Rollt-1)
   roll_filter = roll_accel * ALPHA + ((1-ALPHA) * (roll_gyro_delta + roll_filter));
   pitch_filter = pitch_accel * ALPHA + ((1-ALPHA) * (pitch_gyro_delta + pitch_filter));
-
-  // write to data array
-  // plot_data[iteration][0] = roll_accel;
-  // plot_data[iteration][1] = intl_roll;
-  // plot_data[iteration][2] = roll_filter;
-  // plot_data[iteration][3] = pitch_accel;
-  // plot_data[iteration][4] = intl_pitch;
-  // plot_data[iteration][5] = pitch_filter;
 }
 
 //
