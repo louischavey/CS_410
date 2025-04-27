@@ -34,7 +34,7 @@ struct Joystick   // struct to hold joystick data
   int sequence_num;
 };
 
-void set_motors();
+void calc_pid();
 double timespec_diff_sec(struct timespec start, struct timespec end);
 int check_end_conditions(Joystick joystick_data, struct timespec tstart);
 void calibrate_imu();      
@@ -44,6 +44,10 @@ void to_csv(float *arr, int rows, int cols);
 int setup_imu();
 void setup_joystick();
 void trap(int signal);
+void kill_motors();
+void motor_enable();
+void set_motors(int motor0, int motor1, int motor2, int motor3);
+
 
 //////////////////////////////////////////////
 // Global Variables and Constants
@@ -72,8 +76,8 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-#define MAX_ITERS 20000  // for data collection
-float plot_data[MAX_ITERS][5];  // first 3 cols roll, second 3 are pitch
+#define MAX_ITERS 2000  // for data collection
+float plot_data[MAX_ITERS][6];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
 // Joystick and Safety Bounds
@@ -93,15 +97,19 @@ int run_program=1;
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 100
+#define THRUST_NEUTRAL 500
 #define THRUST_AMP 100
 int thrust=THRUST_NEUTRAL;
 #define PITCH_AMP 10
-#define PGAIN 10    // PGAIN = 10
-#define DGAIN 1.0  // DGAIN = 1.0
-#define IGAIN 0.1  // IGAIN = 0.1
+#define PGAIN 0    // PGAIN = 24
+#define DGAIN 5.0  // DGAIN = 1.0
+#define IGAIN 0.0  // IGAIN = 0.1
 float integral = 0.0;
 #define ISATURATE 100
+#define MOTOR_LIM 1000
+
+// Motor Interfacing
+int motor_address;
 
 //////////////////////////////////////////////
 // Main
@@ -111,7 +119,9 @@ int main (int argc, char *argv[])
 {
     // Setup peripherals
     setup_imu();
-    calibrate_imu();    
+    motor_address = wiringPiI2CSetup(0x56);
+    calibrate_imu();
+    motor_enable();    
     setup_joystick();
     signal(SIGINT, &trap);
 
@@ -144,11 +154,12 @@ int main (int argc, char *argv[])
       // printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_filter, pitch_filter);
       // printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
 
-      set_motors();  // set motor speeds based on PID control
+      calc_pid();  // set motor speeds based on PID control
+      set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
       iteration++;
     }
 
-    to_csv(&plot_data[0][0], MAX_ITERS, 5);
+    to_csv(&plot_data[0][0], MAX_ITERS, 6);
 
     return 0;
 }
@@ -162,7 +173,7 @@ int main (int argc, char *argv[])
 //
 // Compute thrust and set motor values with PID control
 //
-void set_motors() {
+void calc_pid() {
   // Set thrust
   float thrust_mult = (-1 * (joystick_data.thrust - 128)) / 128.0f;
   thrust = (int)((float)THRUST_NEUTRAL + (thrust_mult * THRUST_AMP));
@@ -185,25 +196,98 @@ void set_motors() {
   motor_commands[2] = thrust + (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]) + (int)(integral);   // front right
   motor_commands[3] = thrust - (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]) - (int)(integral);   // back right
 
+  for(size_t i = 0; i < 4; i++) {
+    if(motor_commands[i] > MOTOR_LIM) {
+      motor_commands[i] = MOTOR_LIM;
+    }
+  }
+
   // write to data array
   plot_data[iteration][0] = pitch_filter;
-  plot_data[iteration][1] = pitch_desired;
-  plot_data[iteration][2] = thrust;
-  plot_data[iteration][3] = motor_commands[0];
-  plot_data[iteration][4] = motor_commands[1];
-  // plot_data[iteration][0] = pitch_filter;
-  // plot_data[iteration][1] = imu_data[5];
-  // plot_data[iteration][2] = thrust;
-  // plot_data[iteration][3] = motor_commands[0];
-  // plot_data[iteration][4] = motor_commands[1];
+  plot_data[iteration][1] = imu_data[5];
+  plot_data[iteration][2] = motor_commands[0];
+  plot_data[iteration][3] = motor_commands[1];
+  plot_data[iteration][4] = motor_commands[2];
+  plot_data[iteration][5] = motor_commands[3];
+
   printf("%d %f %f %d %d %d\n\r", iteration, pitch_filter, pitch_desired, thrust, motor_commands[0], motor_commands[1]);
 
 }
+
+void set_motors(int motor0, int motor1, int motor2, int motor3)
+{
+  if(motor0<0)
+    motor0=0;
+  if(motor0>2000)
+    motor0=2000;
+  if(motor1<0)
+    motor1=0;
+  if(motor1>2000)
+    motor1=2000;
+  if(motor2<0)
+    motor2=0;
+  if(motor2>2000)
+    motor2=2000;
+  if(motor3<0)
+    motor3=0;
+  if(motor3>2000)
+    motor3=2000;
+  uint8_t motor_id=0;
+  uint8_t special_command=0;
+  uint16_t commanded_speed_0=1000;
+  uint16_t commanded_speed_1=0;
+  uint16_t commanded_speed=0;
+  uint8_t data[2];
+  // wiringPiI2CWriteReg8(motor_address, 0x00,data[0] );
+  //wiringPiI2CWrite (motor_address,data[0]) ;
+  int com_delay=500;
+  motor_id=0;
+  commanded_speed=motor0;
+  data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+  data[1]=commanded_speed&0x7f;
+  wiringPiI2CWrite(motor_address,data[0]);
+  usleep(com_delay);
+  wiringPiI2CWrite(motor_address,data[1]);
+  usleep(com_delay);
+  motor_id=1;
+  commanded_speed=motor1;
+  data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+  data[1]=commanded_speed&0x7f;
+  wiringPiI2CWrite(motor_address,data[0]);
+  usleep(com_delay);
+  wiringPiI2CWrite(motor_address,data[1]);
+  usleep(com_delay);
+  motor_id=2;
+  commanded_speed=motor2;
+  data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+  data[1]=commanded_speed&0x7f;
+  wiringPiI2CWrite(motor_address,data[0]);
+  usleep(com_delay);
+  wiringPiI2CWrite(motor_address,data[1]);
+  usleep(com_delay);
+  motor_id=3;
+  commanded_speed=motor3;
+  data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+  data[1]=commanded_speed&0x7f;
+  wiringPiI2CWrite(motor_address,data[0]);
+  usleep(com_delay);
+  wiringPiI2CWrite(motor_address,data[1]);
+  usleep(com_delay);
+}
+
+
 
 
 //////////////////////////////////////////////
 // IMU Functions
 //////////////////////////////////////////////
+
+
+void kill_motors() {
+  for(size_t i=0; i < 4; i++) {
+    motor_commands[i] = 0;
+  }
+}
 
 //
 // check_end_conditions
@@ -214,20 +298,24 @@ void set_motors() {
 int check_end_conditions(Joystick joystick_data, struct timespec tstart) {
   if(fabs(imu_data[3]) > GYRO_BOUND || fabs(imu_data[4]) > GYRO_BOUND || fabs(imu_data[5]) > GYRO_BOUND) {     // gyro speed out of bounds
     printf("EXIT: gyro speed out of safe bounds (+/- %d deg/sec)\n\r", GYRO_BOUND);
+    kill_motors();
     return 0;
   }
 
   if (fabs(roll_filter) > ROLL_BOUND) {                     // roll angle out of bounds
+    kill_motors();
     printf("EXIT: roll angle out of safe bounds (+/- %d deg)\n\r", ROLL_BOUND);
     return 0;
   }
 
   if (fabs(pitch_filter) > PITCH_BOUND) {                    // pitch angle out of bounds
+    kill_motors();
     printf("EXIT: pitch angle out of bounds (+/- %d deg)\n\r", PITCH_BOUND);
     return 0;
   }
 
   if(joystick_data.key1) {                          // manual exit (B button)
+    kill_motors();
     printf("EXIT: manual exit (B button)\n\r");
     return 0;
   }
@@ -240,6 +328,7 @@ int check_end_conditions(Joystick joystick_data, struct timespec tstart) {
 
   if (elapsed >= TIMEOUT) {                  // controller timeout (if sequence number hasn't change for TIMEOUT seconds)
     printf("EXIT: controller timeout (%f seconds)\n\r", TIMEOUT);
+    kill_motors();
     return 0;
   }
 
@@ -494,6 +583,92 @@ void trap(int signal)
 {
   printf("EXIT: force quit\n\r");
   run_program=0;
+}
+
+//
+// motor_enable
+//
+// Enable motors by sending command to motor controller
+//
+void motor_enable()
+{
+  uint8_t motor_id=0;
+  uint8_t special_command=0;
+  uint16_t commanded_speed_0=1000;
+  uint16_t commanded_speed_1=0;
+  uint16_t commanded_speed=0;
+  uint8_t data[2];
+  int cal_delay=50;
+  for(int i=0;i<1000;i++)
+  {
+    motor_id=0;
+    commanded_speed=0;
+    data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+    data[1]=commanded_speed&0x7f;
+    wiringPiI2CWrite(motor_address,data[0]);
+    usleep(cal_delay);
+    wiringPiI2CWrite(motor_address,data[1]);
+    usleep(cal_delay);
+    motor_id=1;
+    commanded_speed=0;
+    data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+    data[1]=commanded_speed&0x7f;
+    wiringPiI2CWrite(motor_address,data[0]);
+    usleep(cal_delay);
+    wiringPiI2CWrite(motor_address,data[1]);
+    usleep(cal_delay);
+    motor_id=2;
+    commanded_speed=0;
+    data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+    data[1]=commanded_speed&0x7f;
+    wiringPiI2CWrite(motor_address,data[0]);
+    usleep(cal_delay);
+    wiringPiI2CWrite(motor_address,data[1]);
+    usleep(cal_delay);
+    motor_id=3;
+    commanded_speed=0;
+    data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+    data[1]=commanded_speed&0x7f;
+    wiringPiI2CWrite(motor_address,data[0]);
+    usleep(cal_delay);
+    wiringPiI2CWrite(motor_address,data[1]);
+    usleep(cal_delay);
+  }
+  for(int i=0;i<2000;i++)
+  {
+    motor_id=0;
+    commanded_speed=50;
+    data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+    data[1]=commanded_speed&0x7f;
+    wiringPiI2CWrite(motor_address,data[0]);
+    usleep(cal_delay);
+    wiringPiI2CWrite(motor_address,data[1]);
+    usleep(cal_delay);
+    motor_id=1;
+    commanded_speed=50;
+    data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+    data[1]=commanded_speed&0x7f;
+    wiringPiI2CWrite(motor_address,data[0]);
+    usleep(cal_delay);
+    wiringPiI2CWrite(motor_address,data[1]);
+    usleep(cal_delay);
+    motor_id=2;
+    commanded_speed=50;
+    data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+    data[1]=commanded_speed&0x7f;
+    wiringPiI2CWrite(motor_address,data[0]);
+    usleep(cal_delay);
+    wiringPiI2CWrite(motor_address,data[1]);
+    usleep(cal_delay);
+    motor_id=3;
+    commanded_speed=50;
+    data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
+    data[1]=commanded_speed&0x7f;
+    wiringPiI2CWrite(motor_address,data[0]);
+    usleep(cal_delay);
+    wiringPiI2CWrite(motor_address,data[1]);
+    usleep(cal_delay);
+  }
 }
 
 //////////////////////////////////////////////
