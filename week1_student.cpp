@@ -76,8 +76,9 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-#define MAX_ITERS 2000  // for data collection
-float plot_data[MAX_ITERS][6];  // first 3 cols roll, second 3 are pitch
+#define MAX_ITERS 5000  // for data collection
+#define PLOT_COLS 5
+float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
 // Joystick and Safety Bounds
@@ -101,15 +102,15 @@ int motor_commands[4];  // hold commanded motor speeds based on PID control
 #define THRUST_AMP 100
 int thrust=THRUST_NEUTRAL;
 #define PITCH_AMP 10
-#define PGAIN 0    // PGAIN = 24
+#define PGAIN 35.0    // PGAIN = 24
 #define DGAIN 5.0  // DGAIN = 1.0
 #define IGAIN 0.0  // IGAIN = 0.1
 float integral = 0.0;
 #define ISATURATE 100
-#define MOTOR_LIM 1000
 
 // Motor Interfacing
 int motor_address;
+#define MOTOR_LIM 1000
 
 //////////////////////////////////////////////
 // Main
@@ -159,7 +160,7 @@ int main (int argc, char *argv[])
       iteration++;
     }
 
-    to_csv(&plot_data[0][0], MAX_ITERS, 6);
+    to_csv(&plot_data[0][0], MAX_ITERS, PLOT_COLS);
 
     return 0;
 }
@@ -204,13 +205,12 @@ void calc_pid() {
 
   // write to data array
   plot_data[iteration][0] = pitch_filter;
-  plot_data[iteration][1] = imu_data[5];
-  plot_data[iteration][2] = motor_commands[0];
-  plot_data[iteration][3] = motor_commands[1];
-  plot_data[iteration][4] = motor_commands[2];
-  plot_data[iteration][5] = motor_commands[3];
+  plot_data[iteration][1] = motor_commands[0];
+  plot_data[iteration][2] = motor_commands[1];
+  plot_data[iteration][3] = motor_commands[2];
+  plot_data[iteration][4] = motor_commands[3];
 
-  printf("%d %f %f %d %d %d\n\r", iteration, pitch_filter, pitch_desired, thrust, motor_commands[0], motor_commands[1]);
+  printf("pitch: %f motor_front: %d motor_back: %d\n\r", pitch_filter, motor_commands[0], motor_commands[1]);
 
 }
 
@@ -253,8 +253,8 @@ void set_motors(int motor0, int motor1, int motor2, int motor3)
   commanded_speed=motor1;
   data[0]=0x80+(motor_id<<5)+(special_command<<4)+((commanded_speed>>7)&0x0f);
   data[1]=commanded_speed&0x7f;
-  wiringPiI2CWrite(motor_address,data[0]);
   usleep(com_delay);
+  wiringPiI2CWrite(motor_address,data[0]);
   wiringPiI2CWrite(motor_address,data[1]);
   usleep(com_delay);
   motor_id=2;
