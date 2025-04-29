@@ -530,10 +530,10 @@ int setup_imu()
     sleep(1);
     wiringPiI2CWriteReg8(accel_address, 0x7d, 0x04); //power on accel    
     wiringPiI2CWriteReg8(accel_address, 0x41, 0x00); //accel range to +_3g    
-    wiringPiI2CWriteReg8(accel_address, 0x40, 0x89); //high speed filtered accel
-    wiringPiI2CWriteReg8(gyro_address, 0x11, 0x00);//power on gyro
-    wiringPiI2CWriteReg8(gyro_address, 0x0F, 0x01);//set gyro to +-1000dps
-    wiringPiI2CWriteReg8(gyro_address, 0x10, 0x03);//set data rate and bandwith
+    wiringPiI2CWriteReg8(accel_address, 0x40, 0xA9); //high speed filtered accel
+    wiringPiI2CWriteReg8(gyro_address, 0x11, 0x00);  //power on gyro
+    wiringPiI2CWriteReg8(gyro_address, 0x0F, 0x01);  //set gyro to +-1000dps
+    wiringPiI2CWriteReg8(gyro_address, 0x10, 0x03);  //set data rate and bandwith
     
     
     sleep(1);

@@ -27,7 +27,7 @@ def main():
     plt.plot(t, motor_3, color='purple', label=f'motor_3')
     plt.plot(t, motor_4, color='yellow', label=f'motor_4')
     plt.legend()
-    plt.savefig(f'DLPF_normal.png')
+    plt.savefig(f'DLPF_Normal.png')
 
     return
 
