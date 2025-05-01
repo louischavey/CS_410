@@ -16,6 +16,7 @@
 // gcc -o week1_student week1_student.cpp -lwiringPi -lm
 // gcc -o udp_rx udp_rx.cpp -lwiringPi -lm
 // scp C:\Users\jarmi\CS_410\week1_student.cpp pi@10.42.0.1:/home/pi/flight_controller/week1_student.cpp
+// scp pi@10.42.0.1:~/flight_controller/data.csv .
 
 //////////////////////////////////////////////
 // Function Prototypes and Structs
@@ -76,7 +77,7 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-#define MAX_ITERS 2000  // for data collection
+#define MAX_ITERS 4000  // for data collection
 #define PLOT_COLS 6
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
@@ -101,16 +102,24 @@ int motor_commands[4];  // hold commanded motor speeds based on PID control
 #define THRUST_NEUTRAL 500
 #define THRUST_AMP 100
 int thrust=THRUST_NEUTRAL;
-#define PITCH_AMP 10
-#define PGAIN 35.0    // PGAIN = 24
-#define DGAIN 5.0  // DGAIN = 1.0
-#define IGAIN 0.0  // IGAIN = 0.1
-float integral = 0.0;
-#define ISATURATE 100
+// Pitch
+#define PPITCH_AMP 10
+#define PPGAIN 0.0    // PPGAIN = 38.0
+#define PDGAIN 0.0  // PDGAIN = 7.0
+#define PIGAIN 0.0  // PIGAIN = 0.2
+float Pintegral = 0.0;
+#define PISATURATE 100
+// Roll
+#define RPITCH_AMP 10
+#define RPGAIN 38.0    // RPGAIN = 38.0
+#define RDGAIN 7.0  // RDGAIN = 7.0
+#define RIGAIN 0.2  // RIGAIN = 0.2
+float Rintegral = 0.0;
+#define RISATURATE 100
 
 // Motor Interfacing
 int motor_address;
-#define MOTOR_LIM 1000
+#define MOTOR_LIM 1200
 
 //////////////////////////////////////////////
 // Main
@@ -180,6 +189,10 @@ void calc_pid() {
   thrust = (int)((float)THRUST_NEUTRAL + (thrust_mult * THRUST_AMP));
   // printf("mult: %10.3f thrust: %10d\n\r", mult, thrust);
 
+  //
+  // Pitch
+  //
+
   // Pitch error = joystick_pitch - filter_pitch
   float pitch_mult = ((float)joystick_data.pitch - 128.0f) / 128.0f;
   float pitch_desired = ((float)PITCH_AMP) * pitch_mult;
@@ -187,31 +200,50 @@ void calc_pid() {
   // printf("mult: %10.3f desired: %10.5f filt_pitch: %10.5f error: %10.5f\n\r", pitch_mult, pitch_desired, pitch_filter, pitch_error);
 
   // Calculate integral
-  integral += IGAIN * pitch_error;
-  if (integral > ISATURATE) {integral = ISATURATE;}
-  else if (integral < -ISATURATE) {integral = -ISATURATE;}
+  Pintegral += PIGAIN * pitch_error;
+  if (Pintegral > PISATURATE) {Pintegral = PISATURATE;}
+  else if (Pintegral < -PISATURATE) {Pintegral = -PISATURATE;}
+
+  //
+  // Roll
+  //
+
+  // Roll error = joystick_roll - filter_roll
+  float roll_mult = ((float)joystick_data.pitch - 128.0f) / 128.0f;
+  float roll_desired = ((float)roll_AMP) * roll_mult;
+  float roll_error = (float)roll_desired - roll_filter;
+
+  // Calculate integral
+  Rintegral += RIGAIN * roll_error;
+  if (Rintegral > RISATURATE) {Rintegral = RISATURATE;}
+  else if (Rintegral < -RISATURATE) {Rintegral = -RISATURATE;}
+
+  int pitch_front_command = (int)(PPGAIN * pitch_error) - (int)(PDGAIN * imu_data[5]) + (int)(Pintegral);
+  int pitch_back_command = -(int)(PPGAIN * pitch_error) + (int)(PDGAIN * imu_data[5]) - (int)(Pintegral);
+  int roll_right_command = (int)(RPGAIN * roll_error) - (int)(RDGAIN * imu_data[4]) + (int)(Rintegral);
+  int roll_left_command = -(int)(RPGAIN * roll_error) + (int)(RDGAIN * imu_data[4]) - (int)(Rintegral);
 
   // Update motors
-  motor_commands[0] = thrust + (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]) + (int)(integral);   // front left
-  motor_commands[1] = thrust - (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]) - (int)(integral);   // back left
-  motor_commands[2] = thrust + (int)(PGAIN * pitch_error) - (int)(DGAIN * imu_data[5]) + (int)(integral);   // front right
-  motor_commands[3] = thrust - (int)(PGAIN * pitch_error) + (int)(DGAIN * imu_data[5]) - (int)(integral);   // back right
+  motor_commands[0] = thrust + pitch_front_command + roll_left_command;   // front left
+  motor_commands[1] = thrust + pitch_back_command + roll_left_command;    // back left
+  motor_commands[2] = thrust + pitch_front_command + roll_right_command;  // front right
+  motor_commands[3] = thrust + pitch_back_command + roll_right_command;   // back right
 
-  for(size_t i = 0; i < 4; i++) {
+  for(size_t i = 0; i < 4; Pi++) {
     if(motor_commands[i] > MOTOR_LIM) {
       motor_commands[i] = MOTOR_LIM;
     }
   }
 
   // write to data array
-  plot_data[iteration][0] = pitch_accel;
+  plot_data[iteration][0] = pitch_desired;
   plot_data[iteration][1] = pitch_filter;
   plot_data[iteration][2] = motor_commands[0];
   plot_data[iteration][3] = motor_commands[1];
   plot_data[iteration][4] = motor_commands[2];
   plot_data[iteration][5] = motor_commands[3];
 
-  printf("pitch: %f motor_front: %d motor_back: %d\n\r", pitch_filter, motor_commands[0], motor_commands[1]);
+  printf("pitch: %f motor_front: %d motor_back: %d integral: %f\n\r", pitch_filter, motor_commands[0], motor_commands[1], integral);
 
 }
 
@@ -530,7 +562,7 @@ int setup_imu()
     sleep(1);
     wiringPiI2CWriteReg8(accel_address, 0x7d, 0x04); //power on accel    
     wiringPiI2CWriteReg8(accel_address, 0x41, 0x00); //accel range to +_3g    
-    wiringPiI2CWriteReg8(accel_address, 0x40, 0xA9); //high speed filtered accel
+    wiringPiI2CWriteReg8(accel_address, 0x40, 0x99); //high speed filtered accel
     wiringPiI2CWriteReg8(gyro_address, 0x11, 0x00);  //power on gyro
     wiringPiI2CWriteReg8(gyro_address, 0x0F, 0x01);  //set gyro to +-1000dps
     wiringPiI2CWriteReg8(gyro_address, 0x10, 0x03);  //set data rate and bandwith
