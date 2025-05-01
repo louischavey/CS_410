@@ -103,17 +103,17 @@ int motor_commands[4];  // hold commanded motor speeds based on PID control
 #define THRUST_AMP 100
 int thrust=THRUST_NEUTRAL;
 // Pitch
-#define PPITCH_AMP 10
+#define PITCH_AMP 10
 #define PPGAIN 0.0    // PPGAIN = 38.0
 #define PDGAIN 0.0  // PDGAIN = 7.0
 #define PIGAIN 0.0  // PIGAIN = 0.2
 float Pintegral = 0.0;
 #define PISATURATE 100
 // Roll
-#define RPITCH_AMP 10
-#define RPGAIN 38.0    // RPGAIN = 38.0
-#define RDGAIN 7.0  // RDGAIN = 7.0
-#define RIGAIN 0.2  // RIGAIN = 0.2
+#define ROLL_AMP 10
+#define RPGAIN 20.0    // RPGAIN = 27.0
+#define RDGAIN 2.6  // RDGAIN = 4.5
+#define RIGAIN 0.1  // RIGAIN = 0.1
 float Rintegral = 0.0;
 #define RISATURATE 100
 
@@ -209,8 +209,8 @@ void calc_pid() {
   //
 
   // Roll error = joystick_roll - filter_roll
-  float roll_mult = ((float)joystick_data.pitch - 128.0f) / 128.0f;
-  float roll_desired = ((float)roll_AMP) * roll_mult;
+  float roll_mult = ((float)joystick_data.roll - 128.0f) / 128.0f;
+  float roll_desired = ((float)ROLL_AMP) * roll_mult;
   float roll_error = (float)roll_desired - roll_filter;
 
   // Calculate integral
@@ -218,10 +218,14 @@ void calc_pid() {
   if (Rintegral > RISATURATE) {Rintegral = RISATURATE;}
   else if (Rintegral < -RISATURATE) {Rintegral = -RISATURATE;}
 
+  //
+  // Assign commands
+  //
+
   int pitch_front_command = (int)(PPGAIN * pitch_error) - (int)(PDGAIN * imu_data[5]) + (int)(Pintegral);
   int pitch_back_command = -(int)(PPGAIN * pitch_error) + (int)(PDGAIN * imu_data[5]) - (int)(Pintegral);
-  int roll_right_command = (int)(RPGAIN * roll_error) - (int)(RDGAIN * imu_data[4]) + (int)(Rintegral);
-  int roll_left_command = -(int)(RPGAIN * roll_error) + (int)(RDGAIN * imu_data[4]) - (int)(Rintegral);
+  int roll_right_command = -(int)(RPGAIN * roll_error) + (int)(RDGAIN * imu_data[4]) - (int)(Rintegral);
+  int roll_left_command = (int)(RPGAIN * roll_error) - (int)(RDGAIN * imu_data[4]) + (int)(Rintegral);
 
   // Update motors
   motor_commands[0] = thrust + pitch_front_command + roll_left_command;   // front left
@@ -229,21 +233,21 @@ void calc_pid() {
   motor_commands[2] = thrust + pitch_front_command + roll_right_command;  // front right
   motor_commands[3] = thrust + pitch_back_command + roll_right_command;   // back right
 
-  for(size_t i = 0; i < 4; Pi++) {
+  for(size_t i = 0; i < 4; i++) {
     if(motor_commands[i] > MOTOR_LIM) {
       motor_commands[i] = MOTOR_LIM;
     }
   }
 
   // write to data array
-  plot_data[iteration][0] = pitch_desired;
-  plot_data[iteration][1] = pitch_filter;
+  plot_data[iteration][0] = roll_desired;
+  plot_data[iteration][1] = roll_filter;
   plot_data[iteration][2] = motor_commands[0];
   plot_data[iteration][3] = motor_commands[1];
   plot_data[iteration][4] = motor_commands[2];
   plot_data[iteration][5] = motor_commands[3];
 
-  printf("pitch: %f motor_front: %d motor_back: %d integral: %f\n\r", pitch_filter, motor_commands[0], motor_commands[1], integral);
+  printf("roll: %f motor_left: %d motor_right: %d integral: %f\n\r", roll_filter, motor_commands[0], motor_commands[2], Rintegral);
 
 }
 
