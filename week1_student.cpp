@@ -113,7 +113,7 @@ float Pintegral = 0.0;
 #define ROLL_AMP 10
 #define RPGAIN 20.0    // RPGAIN = 27.0
 #define RDGAIN 2.6  // RDGAIN = 4.5
-#define RIGAIN 0.1  // RIGAIN = 0.1
+#define RIGAIN 0.15  // RIGAIN = 0.1
 float Rintegral = 0.0;
 #define RISATURATE 100
 
