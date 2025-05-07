@@ -78,7 +78,7 @@ float intl_pitch=0;
 
 // Data Plotting
 #define MAX_ITERS 4000  // for data collection
-#define PLOT_COLS 6
+#define PLOT_COLS 9
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
@@ -92,6 +92,7 @@ float roll_accel=0;
 Joystick* shared_memory;
 Joystick joystick_data;
 int run_program=1;
+int paused=0;
 #define ROLL_BOUND 45
 #define PITCH_BOUND 45
 #define GYRO_BOUND 300
@@ -146,6 +147,16 @@ int main (int argc, char *argv[])
       printf("%d\n\r", iteration);
       // Get most recent joystick data
       joystick_data = *shared_memory;
+
+      if (joystick_data.key3) {
+        paused=0;
+      }
+
+      if (joystick_data.key0 || paused) {
+        paused=1;
+        set_motors(1, 1, 1, 1);
+        continue;
+      }
 
       // If sequence number has changed, restart timeout
       if (joystick_data.sequence_num != prev_seq_num) {
@@ -242,12 +253,15 @@ void calc_pid() {
   // write to data array
   plot_data[iteration][0] = roll_desired;
   plot_data[iteration][1] = roll_filter;
-  plot_data[iteration][2] = motor_commands[0];
-  plot_data[iteration][3] = motor_commands[1];
-  plot_data[iteration][4] = motor_commands[2];
-  plot_data[iteration][5] = motor_commands[3];
+  plot_data[iteration][2] = pitch_desired;
+  plot_data[iteration][3] = pitch_filter;
+  plot_data[iteration][4] = motor_commands[0];
+  plot_data[iteration][5] = motor_commands[1];
+  plot_data[iteration][6] = motor_commands[2];
+  plot_data[iteration][7] = motor_commands[3];
+  plot_data[iteration][8] = thrust;
 
-  printf("roll: %f motor_left: %d motor_right: %d integral: %f\n\r", roll_filter, motor_commands[0], motor_commands[2], Rintegral);
+  printf("roll_desired: %f roll_filter: %f pitch_desired: %f pitch_filter: %f motor_front_left: %d motor_back_left: %d motor_front_right: %d motor_back_right: %\n\r", roll_desired, roll_filter, pitch_desired, pitch_filter, motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3]);
 
 }
 
