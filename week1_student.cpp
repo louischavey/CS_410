@@ -77,8 +77,9 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-#define MAX_ITERS 4000  // for data collection
-#define PLOT_COLS 9
+int plot = 1;
+#define MAX_ITERS 1000  // for data collection
+#define PLOT_COLS 6
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
@@ -95,32 +96,35 @@ int run_program=1;
 int paused=0;
 #define ROLL_BOUND 45
 #define PITCH_BOUND 45
-#define GYRO_BOUND 300
+#define GYRO_BOUND 450
 #define TIMEOUT 0.5
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 500
+#define THRUST_NEUTRAL 1550
 #define THRUST_AMP 100
 int thrust=THRUST_NEUTRAL;
 // Pitch
 #define PITCH_AMP 10
-#define PPGAIN 0.0    // PPGAIN = 38.0
-#define PDGAIN 0.0  // PDGAIN = 7.0
-#define PIGAIN 0.0  // PIGAIN = 0.2
+#define PPGAIN 16.5    // PPGAIN = 15.0
+#define PDGAIN 3.0  // PDGAIN = 2.8
+#define PIGAIN 0.2  // PIGAIN = 0.2
 float Pintegral = 0.0;
 #define PISATURATE 100
 // Roll
 #define ROLL_AMP 10
-#define RPGAIN 20.0    // RPGAIN = 27.0
-#define RDGAIN 2.6  // RDGAIN = 4.5
-#define RIGAIN 0.15  // RIGAIN = 0.1
+#define RPGAIN 16.5    // RPGAIN = 20.0
+#define RDGAIN 2.8  // RDGAIN = 2.9
+#define RIGAIN 0.15  // RIGAIN = 0.15
 float Rintegral = 0.0;
 #define RISATURATE 100
+// Yaw
+#define YAW_AMP 180
+#define YPGAIN 3.0    // YPGAIN = 3.0
 
 // Motor Interfacing
 int motor_address;
-#define MOTOR_LIM 1200
+#define MOTOR_LIM 2000
 
 //////////////////////////////////////////////
 // Main
@@ -144,7 +148,7 @@ int main (int argc, char *argv[])
     while(run_program)
     {
       if (iteration == MAX_ITERS) {break;}
-      printf("%d\n\r", iteration);
+      if(plot) {printf("%d\n\r", iteration);}
       // Get most recent joystick data
       joystick_data = *shared_memory;
 
@@ -177,7 +181,7 @@ int main (int argc, char *argv[])
 
       calc_pid();  // set motor speeds based on PID control
       set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
-      iteration++;
+      if(plot){iteration++;}
     }
 
     to_csv(&plot_data[0][0], MAX_ITERS, PLOT_COLS);
@@ -230,6 +234,15 @@ void calc_pid() {
   else if (Rintegral < -RISATURATE) {Rintegral = -RISATURATE;}
 
   //
+  // Yaw
+  //
+
+  // Yaw velocity error = joystick_yaw_velocity - gyroscope[x]
+  float yaw_mult = ((float)joystick_data.yaw - 128.0f) / 128.0f;
+  float yaw_vel_desired = -((float)YAW_AMP) * yaw_mult;
+  float yaw_vel_error = -(float)yaw_vel_desired + imu_data[3]; 
+
+  //
   // Assign commands
   //
 
@@ -237,31 +250,36 @@ void calc_pid() {
   int pitch_back_command = -(int)(PPGAIN * pitch_error) + (int)(PDGAIN * imu_data[5]) - (int)(Pintegral);
   int roll_right_command = -(int)(RPGAIN * roll_error) + (int)(RDGAIN * imu_data[4]) - (int)(Rintegral);
   int roll_left_command = (int)(RPGAIN * roll_error) - (int)(RDGAIN * imu_data[4]) + (int)(Rintegral);
+  int yaw_cw_command = (int)(YPGAIN * yaw_vel_error);
+  int yaw_ccw_command = -(int)(YPGAIN * yaw_vel_error);
 
   // Update motors
-  motor_commands[0] = thrust + pitch_front_command + roll_left_command;   // front left
-  motor_commands[1] = thrust + pitch_back_command + roll_left_command;    // back left
-  motor_commands[2] = thrust + pitch_front_command + roll_right_command;  // front right
-  motor_commands[3] = thrust + pitch_back_command + roll_right_command;   // back right
+  motor_commands[0] = thrust + pitch_front_command + roll_left_command + yaw_cw_command;    // front left
+  motor_commands[1] = thrust + pitch_back_command + roll_left_command + yaw_ccw_command;    // back left
+  motor_commands[2] = thrust + pitch_front_command + roll_right_command + yaw_ccw_command;  // front right
+  motor_commands[3] = thrust + pitch_back_command + roll_right_command + yaw_cw_command;    // back right
 
   for(size_t i = 0; i < 4; i++) {
     if(motor_commands[i] > MOTOR_LIM) {
       motor_commands[i] = MOTOR_LIM;
     }
+    else if(motor_commands[i] < -MOTOR_LIM) {
+      motor_commands[i] = -MOTOR_LIM;
+    }
   }
 
   // write to data array
-  plot_data[iteration][0] = roll_desired;
-  plot_data[iteration][1] = roll_filter;
-  plot_data[iteration][2] = pitch_desired;
-  plot_data[iteration][3] = pitch_filter;
-  plot_data[iteration][4] = motor_commands[0];
-  plot_data[iteration][5] = motor_commands[1];
-  plot_data[iteration][6] = motor_commands[2];
-  plot_data[iteration][7] = motor_commands[3];
-  plot_data[iteration][8] = thrust;
+  if(plot) {
+    plot_data[iteration][0] = pitch_desired;
+    plot_data[iteration][1] = pitch_filter;
+    plot_data[iteration][2] = roll_desired;
+    plot_data[iteration][3] = roll_filter;
+    plot_data[iteration][4] = yaw_vel_desired;
+    plot_data[iteration][5] = imu_data[3];
+  }
+  
 
-  printf("roll_desired: %f roll_filter: %f pitch_desired: %f pitch_filter: %f motor_front_left: %d motor_back_left: %d motor_front_right: %d motor_back_right: %\n\r", roll_desired, roll_filter, pitch_desired, pitch_filter, motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3]);
+  printf("yaw_mult: %f yaw_vel_actual: %f roll_desired: %f roll_filter: %f pitch_desired: %f pitch_filter: %f motor_front_left: %d motor_back_left: %d motor_front_right: %d motor_back_right: %\n\r", yaw_mult, imu_data[3], roll_desired, roll_filter, pitch_desired, pitch_filter, motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3]);
 
 }
 
