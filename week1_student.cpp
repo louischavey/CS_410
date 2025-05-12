@@ -78,7 +78,7 @@ float intl_pitch=0;
 
 // Data Plotting
 int plot = 1;
-#define MAX_ITERS 1000  // for data collection
+#define MAX_ITERS 3500  // for data collection
 #define PLOT_COLS 6
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
@@ -101,7 +101,7 @@ int paused=0;
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 1550
+#define THRUST_NEUTRAL 1450
 #define THRUST_AMP 100
 int thrust=THRUST_NEUTRAL;
 // Pitch
@@ -114,7 +114,7 @@ float Pintegral = 0.0;
 // Roll
 #define ROLL_AMP 10
 #define RPGAIN 16.5    // RPGAIN = 20.0
-#define RDGAIN 2.8  // RDGAIN = 2.9
+#define RDGAIN 2.5  // RDGAIN = 2.9
 #define RIGAIN 0.15  // RIGAIN = 0.15
 float Rintegral = 0.0;
 #define RISATURATE 100
