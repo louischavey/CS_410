@@ -21,14 +21,14 @@ def main():
     
 
     plt.figure(figsize=(10, 5))
-    plt.plot(t, pitch_desired, color='blue', label=f'pitch_desired')
+    plt.plot(t, motor_1, color='blue', label=f'yaw_desired')
     plt.plot(t, pitch_filter, color='red', label=f'pitch_filter')
     plt.plot(t, roll_desired, color='green', label=f'roll_desired')
     plt.plot(t, roll_filter, color='cyan', label=f'roll_filter')
-    # plt.plot(t, yaw_desired, color='purple', label=f'yaw_desired')
-    # plt.plot(t, yaw_raw, color='yellow', label=f'yaw_raw')
+    plt.plot(t, yaw_desired, color='purple', label=f'yaw_desired')
+    plt.plot(t, yaw_raw, color='yellow', label=f'yaw_raw')
     plt.legend()
-    plt.savefig(f'flight_test.png')
+    plt.savefig(f'yaw.png')
 
     return
 
