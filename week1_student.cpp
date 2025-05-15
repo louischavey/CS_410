@@ -78,8 +78,8 @@ float intl_pitch=0;
 
 // Data Plotting
 int plot = 0;
-#define MAX_ITERS 2000  // for data collection
-#define PLOT_COLS 6
+#define MAX_ITERS 1500  // for data collection
+#define PLOT_COLS 8
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
@@ -101,25 +101,25 @@ int paused=0;
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 1450
-#define THRUST_AMP 100
+#define THRUST_NEUTRAL 1450  // flying off ground: ~1550
+#define THRUST_AMP 150
 int thrust=THRUST_NEUTRAL;
 // Pitch
-#define PITCH_AMP 5
-#define PPGAIN 13.5    // PPGAIN = 15.0
-#define PDGAIN 2.7  // PDGAIN = 2.8
+#define PITCH_AMP 3  // default: 5
+#define PPGAIN 13.5    // PPGAIN = 13.5
+#define PDGAIN 2.7  // PDGAIN = 2.7
 #define PIGAIN 0.2  // PIGAIN = 0.2
 float Pintegral = 0.0;
 #define PISATURATE 100
 // Roll
-#define ROLL_AMP 5
-#define RPGAIN 13.5    // RPGAIN = 20.0
-#define RDGAIN 2.2  // RDGAIN = 2.9
-#define RIGAIN 0.17  // RIGAIN = 0.15
+#define ROLL_AMP 3  // default: 5
+#define RPGAIN 13.5    // RPGAIN = 13.5
+#define RDGAIN 2.2  // RDGAIN = 2.2
+#define RIGAIN 0.17  // RIGAIN = 0.17
 float Rintegral = 0.0;
 #define RISATURATE 100
 // Yaw
-#define YAW_AMP 180
+#define YAW_AMP  30 // YAMP = 200
 #define YPGAIN 3.0    // YPGAIN = 3.0
 
 // Motor Interfacing
@@ -270,12 +270,15 @@ void calc_pid() {
 
   // write to data array
   if(plot) {
-    plot_data[iteration][0] = motor_commands[0];
-    plot_data[iteration][1] = motor_commands[1];
-    plot_data[iteration][2] = motor_commands[2];
-    plot_data[iteration][3] = motor_commands[3];
-    plot_data[iteration][4] = yaw_vel_desired;
-    plot_data[iteration][5] = imu_data[3];
+    plot_data[iteration][0] = pitch_filter;
+    plot_data[iteration][1] = pitch_desired;
+    plot_data[iteration][2] = roll_filter;
+    plot_data[iteration][3] = roll_desired;
+    plot_data[iteration][4] = motor_commands[0];
+    plot_data[iteration][5] = motor_commands[1];
+    plot_data[iteration][5] = motor_commands[2];
+    plot_data[iteration][5] = motor_commands[3];
+
   }
   
 
@@ -598,7 +601,7 @@ int setup_imu()
     sleep(1);
     wiringPiI2CWriteReg8(accel_address, 0x7d, 0x04); //power on accel    
     wiringPiI2CWriteReg8(accel_address, 0x41, 0x00); //accel range to +_3g    
-    wiringPiI2CWriteReg8(accel_address, 0x40, 0x99); //high speed filtered accel
+    wiringPiI2CWriteReg8(accel_address, 0x40, 0x89); //high speed filtered accel
     wiringPiI2CWriteReg8(gyro_address, 0x11, 0x00);  //power on gyro
     wiringPiI2CWriteReg8(gyro_address, 0x0F, 0x01);  //set gyro to +-1000dps
     wiringPiI2CWriteReg8(gyro_address, 0x10, 0x03);  //set data rate and bandwith
