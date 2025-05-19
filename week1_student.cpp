@@ -105,21 +105,21 @@ int motor_commands[4];  // hold commanded motor speeds based on PID control
 #define THRUST_AMP 150
 int thrust=THRUST_NEUTRAL;
 // Pitch
-#define PITCH_AMP 3  // default: 5
+#define PITCH_AMP 5  // default: 5
 #define PPGAIN 13.5    // PPGAIN = 13.5
 #define PDGAIN 2.7  // PDGAIN = 2.7
 #define PIGAIN 0.2  // PIGAIN = 0.2
 float Pintegral = 0.0;
 #define PISATURATE 100
 // Roll
-#define ROLL_AMP 3  // default: 5
+#define ROLL_AMP 5  // default: 5
 #define RPGAIN 13.5    // RPGAIN = 13.5
 #define RDGAIN 2.2  // RDGAIN = 2.2
 #define RIGAIN 0.17  // RIGAIN = 0.17
 float Rintegral = 0.0;
 #define RISATURATE 100
 // Yaw
-#define YAW_AMP  30 // YAMP = 200
+#define YAW_AMP  200 // YAMP = 200
 #define YPGAIN 3.0    // YPGAIN = 3.0
 
 // Motor Interfacing
@@ -601,7 +601,7 @@ int setup_imu()
     sleep(1);
     wiringPiI2CWriteReg8(accel_address, 0x7d, 0x04); //power on accel    
     wiringPiI2CWriteReg8(accel_address, 0x41, 0x00); //accel range to +_3g    
-    wiringPiI2CWriteReg8(accel_address, 0x40, 0x89); //high speed filtered accel
+    wiringPiI2CWriteReg8(accel_address, 0x40, 0x99); //high speed filtered accel
     wiringPiI2CWriteReg8(gyro_address, 0x11, 0x00);  //power on gyro
     wiringPiI2CWriteReg8(gyro_address, 0x0F, 0x01);  //set gyro to +-1000dps
     wiringPiI2CWriteReg8(gyro_address, 0x10, 0x03);  //set data rate and bandwith
