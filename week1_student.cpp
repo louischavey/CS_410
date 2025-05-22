@@ -78,8 +78,8 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-int plot = 0;
-#define MAX_ITERS 1500  // for data collection
+int plot = 1;
+#define MAX_ITERS 2000  // for data collection
 #define PLOT_COLS 8
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
@@ -95,6 +95,7 @@ Joystick* shared_memory;
 Joystick joystick_data;
 int run_program=1;
 int paused=0;
+int autonomous=0;
 #define ROLL_BOUND 45
 #define PITCH_BOUND 45
 #define GYRO_BOUND 450
@@ -102,8 +103,8 @@ int paused=0;
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 1600  // flying off ground: ~1550
-#define THRUST_AMP 200
+#define THRUST_NEUTRAL 1300  // flying off ground 2-4 feet: 1600
+#define THRUST_AMP 200  // flying off ground 2-4 feet: 200
 int thrust=THRUST_NEUTRAL;
 // Pitch
 #define PITCH_AMP 5  // default: 5
@@ -121,7 +122,9 @@ float Rintegral = 0.0;
 #define RISATURATE 100
 // Yaw
 #define YAW_AMP  200 // YAMP = 200
-#define YPGAIN 3.0    // YPGAIN = 3.0
+#define YPGAIN 6.9    // YPGAIN = 3.0
+#define DESIREDYAW 0.0
+#define CAM_YAW_GAIN 3.0
 
 // Motor Interfacing
 int motor_address;
@@ -158,6 +161,8 @@ int main (int argc, char *argv[])
     int prev_seq_num = shared_memory->sequence_num;
     struct timespec timeout_start;
     timespec_get(&timeout_start, TIME_UTC);
+    struct timespec auto_timeout_start;
+    timespec_get(&auto_timeout_start, TIME_UTC);
 
     while(run_program)
     {
@@ -176,6 +181,19 @@ int main (int argc, char *argv[])
         continue;
       }
 
+      if (joystick_data.key2 && !autonomous) {  // turn on
+        // start timeout
+        timespec_get(&auto_timeout_start,TIME_UTC);
+        autonomous=1;
+        printf("autonomous on\n");
+      }
+      struct timespec auto_tcurr;
+      timespec_get(&auto_tcurr,TIME_UTC);
+
+      if (timespec_diff_sec(auto_tcurr, auto_timeout_start) > 1 && joystick_data.key2 && autonomous) {  // turn off
+        autonomous=0;
+        printf("autonomous off\n");
+      }
       // If sequence number has changed, restart timeout
       if (joystick_data.sequence_num != prev_seq_num) {
         // get current time in seconds
@@ -188,7 +206,7 @@ int main (int argc, char *argv[])
       update_filter();
       run_program = check_end_conditions(joystick_data, timeout_start);
 
-      Camera camera_data=*camera_memory;
+      camera_data=*camera_memory;
       printf("camera=%d %d %d %d %d\n\r",camera_data.x,camera_data.y,camera_data.z,camera_data.yaw,camera_data.sequence_num);
 
       // printf("0: %10d 1: %10d 2: %10d 3: %10d pitch: %10d roll: %10d yaw: %10d thrust: %10d seq_num: %10d\n\r", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3, joystick_data.pitch, joystick_data.roll, joystick_data.yaw, joystick_data.thrust, joystick_data.sequence_num);
@@ -256,7 +274,15 @@ void calc_pid() {
 
   // Yaw velocity error = joystick_yaw_velocity - gyroscope[x]
   float yaw_mult = ((float)joystick_data.yaw - 128.0f) / 128.0f;
-  float yaw_vel_desired = -((float)YAW_AMP) * yaw_mult;
+  float yaw_vel_desired;
+  if (!autonomous) {  // from joystick
+    yaw_vel_desired = -((float)YAW_AMP) * yaw_mult;
+  }
+  else {  
+    printf("Camera data in calc_pid: %d\n", camera_data.yaw);
+    float diff = ((float)camera_data.yaw) - DESIREDYAW;
+    yaw_vel_desired = -diff * CAM_YAW_GAIN;
+  }
   float yaw_vel_error = -(float)yaw_vel_desired + imu_data[3]; 
 
   //
@@ -287,19 +313,14 @@ void calc_pid() {
 
   // write to data array
   if(plot) {
-    plot_data[iteration][0] = pitch_filter;
-    plot_data[iteration][1] = pitch_desired;
-    plot_data[iteration][2] = roll_filter;
-    plot_data[iteration][3] = roll_desired;
-    plot_data[iteration][4] = motor_commands[0];
-    plot_data[iteration][5] = motor_commands[1];
-    plot_data[iteration][5] = motor_commands[2];
-    plot_data[iteration][5] = motor_commands[3];
+    plot_data[iteration][0] = camera_data.yaw;
+    plot_data[iteration][1] = yaw_vel_desired;
+    plot_data[iteration][2] = imu_data[3];  // actual yaw
 
   }
   
 
-  // printf("yaw_mult: %f yaw_vel_actual: %f roll_desired: %f roll_filter: %f pitch_desired: %f pitch_filter: %f motor_front_left: %d motor_back_left: %d motor_front_right: %d motor_back_right: %\n\r", yaw_mult, imu_data[3], roll_desired, roll_filter, pitch_desired, pitch_filter, motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3]);
+  printf("iterations: %d, yaw_vel_actual: %f, yaw_vel_desired: %f, camera_yaw: %d\n\r", iteration, imu_data[3], yaw_vel_desired, camera_data.yaw);
 
 }
 
