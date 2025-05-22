@@ -59,7 +59,7 @@ picam2.start()
 
 # Now set manual exposure and gain
 picam2.set_controls({
-    "ExposureTime": 1000,   # 5 ms
+    "ExposureTime": 5000,   # 25 ms?
     "AnalogueGain": 4.0
 })
 

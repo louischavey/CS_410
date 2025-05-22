@@ -299,7 +299,7 @@ void calc_pid() {
   }
   
 
-  printf("yaw_mult: %f yaw_vel_actual: %f roll_desired: %f roll_filter: %f pitch_desired: %f pitch_filter: %f motor_front_left: %d motor_back_left: %d motor_front_right: %d motor_back_right: %\n\r", yaw_mult, imu_data[3], roll_desired, roll_filter, pitch_desired, pitch_filter, motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3]);
+  // printf("yaw_mult: %f yaw_vel_actual: %f roll_desired: %f roll_filter: %f pitch_desired: %f pitch_filter: %f motor_front_left: %d motor_back_left: %d motor_front_right: %d motor_back_right: %\n\r", yaw_mult, imu_data[3], roll_desired, roll_filter, pitch_desired, pitch_filter, motor_commands[0], motor_commands[1], motor_commands[2], motor_commands[3]);
 
 }
 
