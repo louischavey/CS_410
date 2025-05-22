@@ -48,6 +48,7 @@ void trap(int signal);
 void kill_motors();
 void motor_enable();
 void set_motors(int motor0, int motor1, int motor2, int motor3);
+void setup_camera();
 
 
 //////////////////////////////////////////////
@@ -126,6 +127,18 @@ float Rintegral = 0.0;
 int motor_address;
 #define MOTOR_LIM 2000
 
+// Camera
+struct Camera
+{
+  int x;
+  int y;
+  int z;
+  int yaw;
+  int sequence_num;
+};
+Camera* camera_memory;
+Camera camera_data;
+
 //////////////////////////////////////////////
 // Main
 //////////////////////////////////////////////
@@ -139,6 +152,7 @@ int main (int argc, char *argv[])
     motor_enable();    
     setup_joystick();
     signal(SIGINT, &trap);
+    setup_camera();
 
     // Variables for controller timeout
     int prev_seq_num = shared_memory->sequence_num;
@@ -173,6 +187,9 @@ int main (int argc, char *argv[])
       read_imu(); 
       update_filter();
       run_program = check_end_conditions(joystick_data, timeout_start);
+
+      Camera camera_data=*camera_memory;
+      printf("camera=%d %d %d %d %d\n\r",camera_data.x,camera_data.y,camera_data.z,camera_data.yaw,camera_data.sequence_num);
 
       // printf("0: %10d 1: %10d 2: %10d 3: %10d pitch: %10d roll: %10d yaw: %10d thrust: %10d seq_num: %10d\n\r", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3, joystick_data.pitch, joystick_data.roll, joystick_data.yaw, joystick_data.thrust, joystick_data.sequence_num);
       // printf("prev: %10d current: %10d\n\r", prev_seq_num, joystick_data.sequence_num);
@@ -637,6 +654,27 @@ void setup_joystick()
   /* Write a string to the shared memory segment. */
   //sprintf (shared_memory, "test!!!!.");
 }
+
+void setup_camera()
+{
+  int segment_id;
+  struct shmid_ds shmbuffer;
+  int segment_size;
+  const int shared_segment_size = sizeof(struct Camera);
+  int smhkey=123456;
+  /* Allocate a shared memory segment. */
+  segment_id = shmget (smhkey, shared_segment_size,IPC_CREAT | 0666);
+  /* Attach the shared memory segment. */
+  camera_memory = (Camera*) shmat (segment_id, 0, 0);
+  printf ("shared memory attached at address %p\n", camera_memory);
+  /* Determine the segment's size. */
+  shmctl (segment_id, IPC_STAT, &shmbuffer);
+  segment_size = shmbuffer.shm_segsz;
+  printf ("segment size: %d\n", segment_size);
+  /* Write a string to the shared memory segment. */
+  // sprintf (shared_memory, "test!!!!.");
+}
+
 
 //
 // trap
