@@ -101,8 +101,8 @@ int paused=0;
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 1450  // flying off ground: ~1550
-#define THRUST_AMP 150
+#define THRUST_NEUTRAL 1600  // flying off ground: ~1550
+#define THRUST_AMP 200
 int thrust=THRUST_NEUTRAL;
 // Pitch
 #define PITCH_AMP 5  // default: 5
