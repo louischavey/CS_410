@@ -16,7 +16,7 @@
 // gcc -o week1_student week1_student.cpp -lwiringPi -lm
 // gcc -o udp_rx udp_rx.cpp -lwiringPi -lm
 // scp C:\Users\jarmi\CS_410\week1_student.cpp pi@10.42.0.1:/home/pi/flight_controller/week1_student.cpp
-// scp pi@10.42.0.1:~/flight_controller/data.csv .
+//
 
 //////////////////////////////////////////////
 // Function Prototypes and Structs
@@ -78,7 +78,7 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-int plot = 1;
+int plot = 0;
 #define MAX_ITERS 2000  // for data collection
 #define PLOT_COLS 8
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
@@ -103,7 +103,7 @@ int autonomous=0;
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 1300  // flying off ground 2-4 feet: 1600
+#define THRUST_NEUTRAL 1600  // flying off ground 2-4 feet: 1600
 #define THRUST_AMP 200  // flying off ground 2-4 feet: 200
 int thrust=THRUST_NEUTRAL;
 // Pitch
@@ -123,13 +123,12 @@ float Rintegral = 0.0;
 // Yaw
 #define YAW_AMP  200 // YAMP = 200
 #define YPGAIN 6.9    // YPGAIN = 3.0
-#define DESIREDYAW 0.0
-#define CAM_YAW_GAIN 3.0
 
 // Motor Interfacing
 int motor_address;
 #define MOTOR_LIM 2000
 
+// Camera + Autonomous Flight
 // Camera
 struct Camera
 {
@@ -141,6 +140,21 @@ struct Camera
 };
 Camera* camera_memory;
 Camera camera_data;
+struct timespec camera_time;
+struct timespec prev_camera_time;
+int prev_cam_seq_num;
+
+#define DESIRED_YAW 0.0
+#define CAM_YAW_GAIN 3.0
+
+#define DESIRED_Z 609.6   // 2 feet in mm
+float Z_PREV = 0.0;
+#define CAM_Z_PGAIN 1.0
+#define CAM_Z_DGAIN 1.0
+#define CAM_Z_IGAIN 1.0
+float auto_thrust_i = 0.0;
+
+
 
 //////////////////////////////////////////////
 // Main
@@ -171,16 +185,15 @@ int main (int argc, char *argv[])
       // Get most recent joystick data
       joystick_data = *shared_memory;
 
+      // Autonomous flight activation key
       if (joystick_data.key3) {
         paused=0;
       }
-
       if (joystick_data.key0 || paused) {
         paused=1;
         set_motors(1, 1, 1, 1);
         continue;
       }
-
       if (joystick_data.key2 && !autonomous) {  // turn on
         // start timeout
         timespec_get(&auto_timeout_start,TIME_UTC);
@@ -189,11 +202,12 @@ int main (int argc, char *argv[])
       }
       struct timespec auto_tcurr;
       timespec_get(&auto_tcurr,TIME_UTC);
-
       if (timespec_diff_sec(auto_tcurr, auto_timeout_start) > 1 && joystick_data.key2 && autonomous) {  // turn off
         autonomous=0;
         printf("autonomous off\n");
       }
+
+
       // If sequence number has changed, restart timeout
       if (joystick_data.sequence_num != prev_seq_num) {
         // get current time in seconds
@@ -206,13 +220,14 @@ int main (int argc, char *argv[])
       update_filter();
       run_program = check_end_conditions(joystick_data, timeout_start);
 
+      // Access camera data from shared memory
       camera_data=*camera_memory;
+      if (camera_data.sequence_num != prev_cam_seq_num) {
+        prev_camera_time = camera_time;
+        prev_cam_seq_num = camera_data.sequence_num;
+        timespec_get(&camera_time, TIME_UTC);
+      }
       printf("camera=%d %d %d %d %d\n\r",camera_data.x,camera_data.y,camera_data.z,camera_data.yaw,camera_data.sequence_num);
-
-      // printf("0: %10d 1: %10d 2: %10d 3: %10d pitch: %10d roll: %10d yaw: %10d thrust: %10d seq_num: %10d\n\r", joystick_data.key0, joystick_data.key1, joystick_data.key2, joystick_data.key3, joystick_data.pitch, joystick_data.roll, joystick_data.yaw, joystick_data.thrust, joystick_data.sequence_num);
-      // printf("prev: %10d current: %10d\n\r", prev_seq_num, joystick_data.sequence_num);
-      // printf("gyro_x: %10.5f gyro_y: %10.5f gyro_z: %10.5f roll: %10.5f pitch: %10.5f\n\r", imu_data[3], imu_data[4], imu_data[5], roll_filter, pitch_filter);
-      // printf("roll_filter: %10.5f pitch_filter: %10.5f\n\r", roll_filter, pitch_filter);
 
       calc_pid();  // set motor speeds based on PID control
       set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
@@ -234,10 +249,26 @@ int main (int argc, char *argv[])
 // Compute thrust and set motor values with PID control
 //
 void calc_pid() {
-  // Set thrust
+  // Calculate joystick thrust
   float thrust_mult = (-1 * (joystick_data.thrust - 128)) / 128.0f;
-  thrust = (int)((float)THRUST_NEUTRAL + (thrust_mult * THRUST_AMP));
-  // printf("mult: %10.3f thrust: %10d\n\r", mult, thrust);
+  float joystick_thrust = (int)((float)THRUST_NEUTRAL + (thrust_mult * THRUST_AMP));
+
+  // Calculate autonomous thrust
+  float auto_thrust_p = CAM_Z_PGAIN*(-1.0*((float)camera_data.z) - DESIRED_Z);
+  
+  float elapsed_time = (timespec_diff_sec(prev_camera_time, camera_time) / 1000); // Convert elapsed time to ms
+  float auto_thrust_d = CAM_Z_DGAIN*((-1.0*((float)camera_data.z) - Z_PREV) / elapsed_time); 
+  Z_PREV = -1.0*camera_data.z;
+
+  auto_thrust_i += CAM_Z_IGAIN*(-1*((float)camera_data.z) - DESIRED_Z);
+  float auto_thrust = auto_thrust_p + auto_thrust_d + auto_thrust_i;
+
+  if (!autonomous) {
+    thrust = joystick_thrust;
+  }
+  else {
+    thrust = 0.5*joystick_thrust + 0.5*auto_thrust;
+  }
 
   //
   // Pitch
@@ -247,7 +278,6 @@ void calc_pid() {
   float pitch_mult = ((float)joystick_data.pitch - 128.0f) / 128.0f;
   float pitch_desired = ((float)PITCH_AMP) * pitch_mult;
   float pitch_error = (float)pitch_desired - pitch_filter;
-  // printf("mult: %10.3f desired: %10.5f filt_pitch: %10.5f error: %10.5f\n\r", pitch_mult, pitch_desired, pitch_filter, pitch_error);
 
   // Calculate integral
   Pintegral += PIGAIN * pitch_error;
@@ -279,8 +309,8 @@ void calc_pid() {
     yaw_vel_desired = -((float)YAW_AMP) * yaw_mult;
   }
   else {  
-    printf("Camera data in calc_pid: %d\n", camera_data.yaw);
-    float diff = ((float)camera_data.yaw) - DESIREDYAW;
+    // printf("Camera data in calc_pid: %d\n", camera_data.yaw);
+    float diff = ((float)camera_data.yaw) - DESIRED_YAW;
     yaw_vel_desired = -diff * CAM_YAW_GAIN;
   }
   float yaw_vel_error = -(float)yaw_vel_desired + imu_data[3]; 
@@ -313,14 +343,15 @@ void calc_pid() {
 
   // write to data array
   if(plot) {
-    plot_data[iteration][0] = camera_data.yaw;
-    plot_data[iteration][1] = yaw_vel_desired;
-    plot_data[iteration][2] = imu_data[3];  // actual yaw
+    plot_data[iteration][0] = camera_data.z;
+    plot_data[iteration][1] = DESIRED_Z;
+    plot_data[iteration][2] = camera_data.x;
+    plot_data[iteration][3] = camera_data.y;
 
   }
   
 
-  printf("iterations: %d, yaw_vel_actual: %f, yaw_vel_desired: %f, camera_yaw: %d\n\r", iteration, imu_data[3], yaw_vel_desired, camera_data.yaw);
+  printf("camera_z: %f, auto_thrust: %f\n\r", camera_data.z, yaw_vel_desired, camera_data.yaw);
 
 }
 
