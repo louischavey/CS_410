@@ -78,9 +78,9 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-int plot = 0;
-#define MAX_ITERS 2000  // for data collection
-#define PLOT_COLS 8
+int plot = 1;
+#define MAX_ITERS 1500  // for data collection
+#define PLOT_COLS 5
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
@@ -103,8 +103,8 @@ int autonomous=0;
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 1600  // flying off ground 2-4 feet: 1600
-#define THRUST_AMP 200  // flying off ground 2-4 feet: 200
+#define THRUST_NEUTRAL 1550  // flying off ground 2-4 feet: 1650
+#define THRUST_AMP 300  // flying off ground 2-4 feet: 300
 int thrust=THRUST_NEUTRAL;
 // Pitch
 #define PITCH_AMP 5  // default: 5
@@ -148,12 +148,18 @@ int prev_cam_seq_num;
 #define CAM_YAW_GAIN 3.0
 
 #define DESIRED_Z 609.6   // 2 feet in mm
-float Z_PREV = 0.0;
+int Z_PREV = 0;
 #define CAM_Z_PGAIN 1.0
-#define CAM_Z_DGAIN 1.0
-#define CAM_Z_IGAIN 1.0
+#define CAM_Z_DGAIN 0.0
+#define CAM_Z_IGAIN 0.0
 float auto_thrust_i = 0.0;
+#define AUTO_I_SATURATE 100
 
+#define DESIRED_Y 120.0
+int Y_PREV = 120;
+float camera_y_estimated = (float)Y_PREV;
+#define CAM_Y_PGAIN 0.1
+#define CAM_Y_DGAIN 0.0
 
 
 //////////////////////////////////////////////
@@ -227,11 +233,11 @@ int main (int argc, char *argv[])
         prev_cam_seq_num = camera_data.sequence_num;
         timespec_get(&camera_time, TIME_UTC);
       }
-      printf("camera=%d %d %d %d %d\n\r",camera_data.x,camera_data.y,camera_data.z,camera_data.yaw,camera_data.sequence_num);
+      // printf("x: %d y: %d z: %d yaw: %d %d\n\r",camera_data.x,camera_data.y,camera_data.z,camera_data.yaw,camera_data.sequence_num);
 
       calc_pid();  // set motor speeds based on PID control
       set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
-      if(plot){iteration++;}
+      if(plot && autonomous){iteration++;}
     }
 
     to_csv(&plot_data[0][0], MAX_ITERS, PLOT_COLS);
@@ -253,22 +259,29 @@ void calc_pid() {
   float thrust_mult = (-1 * (joystick_data.thrust - 128)) / 128.0f;
   float joystick_thrust = (int)((float)THRUST_NEUTRAL + (thrust_mult * THRUST_AMP));
 
-  // Calculate autonomous thrust
-  float auto_thrust_p = CAM_Z_PGAIN*(-1.0*((float)camera_data.z) - DESIRED_Z);
   
-  float elapsed_time = (timespec_diff_sec(prev_camera_time, camera_time) / 1000); // Convert elapsed time to ms
-  float auto_thrust_d = CAM_Z_DGAIN*((-1.0*((float)camera_data.z) - Z_PREV) / elapsed_time); 
-  Z_PREV = -1.0*camera_data.z;
+  // float auto_thrust = 0.0;
+  // if (!autonomous) {
+  thrust = joystick_thrust;
+  // }
+  // else {
+  //   // Calculate autonomous thrust
+  //   float auto_thrust_p = CAM_Z_PGAIN*(-((float)camera_data.z) - DESIRED_Z);
+    
+  //   float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) / 1000); // Convert elapsed time to ms
+  //   float auto_thrust_d = CAM_Z_DGAIN*((-((float)camera_data.z) - (float)Z_PREV) / elapsed_cam_time); 
+  //   Z_PREV = -1 * camera_data.z;
 
-  auto_thrust_i += CAM_Z_IGAIN*(-1*((float)camera_data.z) - DESIRED_Z);
-  float auto_thrust = auto_thrust_p + auto_thrust_d + auto_thrust_i;
+  //   auto_thrust_i += CAM_Z_IGAIN*(-1*((float)camera_data.z) - DESIRED_Z);
+  //   if (auto_thrust_i > AUTO_I_SATURATE) {auto_thrust_i = AUTO_I_SATURATE;}
+  //   else if (auto_thrust_i < -AUTO_I_SATURATE) {auto_thrust_i = -AUTO_I_SATURATE;}
 
-  if (!autonomous) {
-    thrust = joystick_thrust;
-  }
-  else {
-    thrust = 0.5*joystick_thrust + 0.5*auto_thrust;
-  }
+  //   auto_thrust = auto_thrust_p + auto_thrust_d + auto_thrust_i;
+
+  //   thrust = 0.5*joystick_thrust + 0.5*auto_thrust;
+
+  //   printf("autonomous: %d camera_z: %d, auto_thrust: %f auto_p: %f auto_d: %f auto_i: %f\n\r", autonomous, camera_data.z, auto_thrust, auto_thrust_p, auto_thrust_d, auto_thrust_i);
+  // }
 
   //
   // Pitch
@@ -290,7 +303,35 @@ void calc_pid() {
 
   // Roll error = joystick_roll - filter_roll
   float roll_mult = ((float)joystick_data.roll - 128.0f) / 128.0f;
-  float roll_desired = ((float)ROLL_AMP) * roll_mult;
+  float joystick_desired_roll = ((float)ROLL_AMP) * roll_mult;
+  float roll_desired = 0.0;
+  if (!autonomous) {
+    roll_desired = joystick_desired_roll;
+  }
+  else {
+    // Filtered estimate for current y position
+    camera_y_estimated = 0.6*camera_y_estimated + 0.4*((float)camera_data.y);
+
+    // PD controller for y
+    float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) / 1000); // Convert elapsed time to ms
+    float auto_desired_roll_p = CAM_Y_PGAIN*(camera_y_estimated - DESIRED_Y);
+    float auto_desired_roll_d = CAM_Y_DGAIN*(camera_y_estimated - Y_PREV) / elapsed_cam_time;
+    Y_PREV = camera_y_estimated;    // Update previous y position
+
+    float auto_desired_roll = auto_desired_roll_p - auto_desired_roll_d;
+    roll_desired = 0.5*joystick_desired_roll + 0.5*auto_desired_roll;
+    printf("roll_actual: %f roll_desired: %f auto_desired: %f filtered_y: %f camera_y: %d roll_p: %f roll_d: %f\n\r", roll_filter, roll_desired, auto_desired_roll, camera_y_estimated, camera_data.y, auto_desired_roll_p, auto_desired_roll_d);
+
+    // write to data array
+    if(plot) {
+      plot_data[iteration][0] = roll_filter;
+      plot_data[iteration][1] = auto_desired_roll;
+      plot_data[iteration][2] = camera_y_estimated;
+      plot_data[iteration][3] = auto_desired_roll_p;
+      plot_data[iteration][4] = auto_desired_roll_d;
+
+    }
+  }
   float roll_error = (float)roll_desired - roll_filter;
 
   // Calculate integral
@@ -341,17 +382,10 @@ void calc_pid() {
     }
   }
 
-  // write to data array
-  if(plot) {
-    plot_data[iteration][0] = camera_data.z;
-    plot_data[iteration][1] = DESIRED_Z;
-    plot_data[iteration][2] = camera_data.x;
-    plot_data[iteration][3] = camera_data.y;
-
-  }
+  
   
 
-  printf("camera_z: %f, auto_thrust: %f\n\r", camera_data.z, yaw_vel_desired, camera_data.yaw);
+  
 
 }
 
