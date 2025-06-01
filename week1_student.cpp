@@ -79,8 +79,8 @@ float intl_pitch=0;
 
 // Data Plotting
 int plot = 1;
-#define MAX_ITERS 1500  // for data collection
-#define PLOT_COLS 5
+#define MAX_ITERS 700  // for data collection
+#define PLOT_COLS 6
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
@@ -142,7 +142,7 @@ Camera* camera_memory;
 Camera camera_data;
 struct timespec camera_time;
 struct timespec prev_camera_time;
-int prev_cam_seq_num;
+int prev_cam_seq_num = -1;
 
 #define DESIRED_YAW 0.0
 #define CAM_YAW_GAIN 3.0
@@ -155,11 +155,12 @@ int Z_PREV = 0;
 float auto_thrust_i = 0.0;
 #define AUTO_I_SATURATE 100
 
-#define DESIRED_Y 120.0
-int Y_PREV = 120;
-float camera_y_estimated = (float)Y_PREV;
+int init_desired_y = 0;
+float DESIRED_Y;
+float Y_PREV;
+float camera_y_estimated;
 #define CAM_Y_PGAIN 0.1
-#define CAM_Y_DGAIN 0.0
+#define CAM_Y_DGAIN 0.5
 
 
 //////////////////////////////////////////////
@@ -183,6 +184,9 @@ int main (int argc, char *argv[])
     timespec_get(&timeout_start, TIME_UTC);
     struct timespec auto_timeout_start;
     timespec_get(&auto_timeout_start, TIME_UTC);
+    timespec_get(&prev_camera_time, TIME_UTC);
+    timespec_get(&camera_time, TIME_UTC);
+
 
     while(run_program)
     {
@@ -309,18 +313,37 @@ void calc_pid() {
     roll_desired = joystick_desired_roll;
   }
   else {
+    // Initialize desired y value and previous y_value to first camera reading
+    if (!init_desired_y) {
+      DESIRED_Y = camera_data.y;
+      Y_PREV = camera_data.y;
+      camera_y_estimated = camera_data.y;
+      init_desired_y = 1;
+    }
     // Filtered estimate for current y position
-    camera_y_estimated = 0.6*camera_y_estimated + 0.4*((float)camera_data.y);
+    // Prevent large reading spikes in filtered y position
+    if (!(fabs((float)camera_data.y) >= fabs(100.0*camera_y_estimated))) {
+      camera_y_estimated = 0.6*camera_y_estimated + 0.4*((float)camera_data.y);
+    }
 
     // PD controller for y
-    float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) / 1000); // Convert elapsed time to ms
+    float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) * 1000); // Convert elapsed time to ms
     float auto_desired_roll_p = CAM_Y_PGAIN*(camera_y_estimated - DESIRED_Y);
     float auto_desired_roll_d = CAM_Y_DGAIN*(camera_y_estimated - Y_PREV) / elapsed_cam_time;
     Y_PREV = camera_y_estimated;    // Update previous y position
 
     float auto_desired_roll = auto_desired_roll_p - auto_desired_roll_d;
+
+    // Put cap on auto desired roll
+    if (auto_desired_roll >= 5.0) {
+      auto_desired_roll = 5.0;
+    }
+    else if (auto_desired_roll <= 5.0) {
+      auto_desired_roll = -5.0;
+    }
+    
     roll_desired = 0.5*joystick_desired_roll + 0.5*auto_desired_roll;
-    printf("roll_actual: %f roll_desired: %f auto_desired: %f filtered_y: %f camera_y: %d roll_p: %f roll_d: %f\n\r", roll_filter, roll_desired, auto_desired_roll, camera_y_estimated, camera_data.y, auto_desired_roll_p, auto_desired_roll_d);
+    printf("y_desired: %f roll_actual: %f roll_desired: %f auto_desired: %f filtered_y: %f camera_y: %d roll_p: %f roll_d: %f\n\r", DESIRED_Y, roll_filter, roll_desired, auto_desired_roll, camera_y_estimated, camera_data.y, auto_desired_roll_p, auto_desired_roll_d);
 
     // write to data array
     if(plot) {
@@ -329,6 +352,7 @@ void calc_pid() {
       plot_data[iteration][2] = camera_y_estimated;
       plot_data[iteration][3] = auto_desired_roll_p;
       plot_data[iteration][4] = auto_desired_roll_d;
+      plot_data[iteration][5] = DESIRED_Y;
 
     }
   }
