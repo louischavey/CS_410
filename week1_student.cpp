@@ -155,12 +155,19 @@ int Z_PREV = 0;
 float auto_thrust_i = 0.0;
 #define AUTO_I_SATURATE 100
 
+int init_desired_x = 0;
+float DESIRED_X;
+float X_PREV;
+float camera_x_estimated;
+#define CAM_X_PGAIN 0.01
+#define CAM_X_DGAIN 0.005
+
 int init_desired_y = 0;
 float DESIRED_Y;
 float Y_PREV;
 float camera_y_estimated;
-#define CAM_Y_PGAIN 0.1
-#define CAM_Y_DGAIN 0.5
+#define CAM_Y_PGAIN 0.0075
+#define CAM_Y_DGAIN 0.001
 
 
 //////////////////////////////////////////////
@@ -241,7 +248,7 @@ int main (int argc, char *argv[])
 
       calc_pid();  // set motor speeds based on PID control
       set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
-      if(plot && autonomous){iteration++;}
+      if(plot){iteration++;}
     }
 
     to_csv(&plot_data[0][0], MAX_ITERS, PLOT_COLS);
@@ -272,7 +279,7 @@ void calc_pid() {
   //   // Calculate autonomous thrust
   //   float auto_thrust_p = CAM_Z_PGAIN*(-((float)camera_data.z) - DESIRED_Z);
     
-  //   float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) / 1000); // Convert elapsed time to ms
+  //   float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) * 1000); // Convert elapsed time to ms
   //   float auto_thrust_d = CAM_Z_DGAIN*((-((float)camera_data.z) - (float)Z_PREV) / elapsed_cam_time); 
   //   Z_PREV = -1 * camera_data.z;
 
@@ -293,7 +300,56 @@ void calc_pid() {
 
   // Pitch error = joystick_pitch - filter_pitch
   float pitch_mult = ((float)joystick_data.pitch - 128.0f) / 128.0f;
-  float pitch_desired = ((float)PITCH_AMP) * pitch_mult;
+  float joystick_desired_pitch = ((float)PITCH_AMP) * pitch_mult;
+
+  float pitch_desired = 0.0;
+  if (!autonomous) {
+    pitch_desired = joystick_desired_pitch;
+  }
+  else {
+    // Initialize desired y value and previous y_value to first camera reading
+    if (!init_desired_x) {
+      DESIRED_X = camera_data.x;
+      X_PREV = camera_data.x;
+      camera_x_estimated = camera_data.x;
+      init_desired_x = 1;
+    }
+    // Filtered estimate for current y position
+    // Prevent large reading spikes in filtered y position
+    if (!(fabs((float)camera_data.x) >= fabs(100.0*camera_x_estimated))) {
+      camera_x_estimated = 0.6*camera_x_estimated + 0.4*((float)camera_data.x);
+    }
+
+    // PD controller for y
+    float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) * 1000); // Convert elapsed time to ms
+    float auto_desired_pitch_p = CAM_X_PGAIN*(camera_x_estimated - DESIRED_X);
+    float auto_desired_pitch_d = CAM_X_DGAIN*(camera_x_estimated - X_PREV) / elapsed_cam_time;
+    X_PREV = camera_x_estimated;    // Update previous y position
+
+    float auto_desired_pitch = auto_desired_pitch_p - auto_desired_pitch_d;
+
+    // Put cap on auto desired roll
+    if (auto_desired_pitch >= 5.0) {
+      auto_desired_pitch = 5.0;
+    }
+    else if (auto_desired_pitch <= -5.0) {
+      auto_desired_pitch = -5.0;
+    }
+    
+    pitch_desired = 0.5*joystick_desired_pitch + 0.5*auto_desired_pitch;
+    printf("x_desired: %f pitch_actual: %f pitch_desired: %f auto_desired: %f filtered_x: %f camera_x: %d pitch_p: %f pitch_d: %f\n\r", DESIRED_X, pitch_filter, pitch_desired, auto_desired_pitch, camera_x_estimated, camera_data.x, auto_desired_pitch_p, auto_desired_pitch_d);
+
+    // write to data array
+    if(plot) {
+      plot_data[iteration][0] = pitch_filter;
+      plot_data[iteration][1] = auto_desired_pitch;
+      plot_data[iteration][2] = camera_y_estimated;
+      plot_data[iteration][3] = auto_desired_pitch_p;
+      plot_data[iteration][4] = auto_desired_pitch_d;
+      plot_data[iteration][5] = DESIRED_X;
+
+    }
+  }
   float pitch_error = (float)pitch_desired - pitch_filter;
 
   // Calculate integral
@@ -338,7 +394,7 @@ void calc_pid() {
     if (auto_desired_roll >= 5.0) {
       auto_desired_roll = 5.0;
     }
-    else if (auto_desired_roll <= 5.0) {
+    else if (auto_desired_roll <= -5.0) {
       auto_desired_roll = -5.0;
     }
     
@@ -406,7 +462,10 @@ void calc_pid() {
     }
   }
 
-  
+  if(plot) {
+      plot_data[iteration][0] = pitch_filter;
+      plot_data[iteration][1] = pitch_desired;
+  }
   
 
   
