@@ -78,7 +78,7 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-int plot = 1;
+int plot = 0;
 #define MAX_ITERS 700  // for data collection
 #define PLOT_COLS 6
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
@@ -141,7 +141,6 @@ struct Camera
 Camera* camera_memory;
 Camera camera_data;
 struct timespec camera_time;
-struct timespec prev_camera_time;
 int prev_cam_seq_num = -1;
 
 #define DESIRED_YAW 0.0
@@ -155,18 +154,20 @@ int Z_PREV = 0;
 float auto_thrust_i = 0.0;
 #define AUTO_I_SATURATE 100
 
+#define AUTO_ANGLE_LIM 20.0
+
 int init_desired_x = 0;
 float DESIRED_X;
 float X_PREV;
 float camera_x_estimated;
-#define CAM_X_PGAIN 0.01
+#define CAM_X_PGAIN 0.02
 #define CAM_X_DGAIN 0.005
 
 int init_desired_y = 0;
 float DESIRED_Y;
 float Y_PREV;
 float camera_y_estimated;
-#define CAM_Y_PGAIN 0.0075
+#define CAM_Y_PGAIN 0.04
 #define CAM_Y_DGAIN 0.001
 
 
@@ -191,7 +192,6 @@ int main (int argc, char *argv[])
     timespec_get(&timeout_start, TIME_UTC);
     struct timespec auto_timeout_start;
     timespec_get(&auto_timeout_start, TIME_UTC);
-    timespec_get(&prev_camera_time, TIME_UTC);
     timespec_get(&camera_time, TIME_UTC);
 
 
@@ -240,7 +240,6 @@ int main (int argc, char *argv[])
       // Access camera data from shared memory
       camera_data=*camera_memory;
       if (camera_data.sequence_num != prev_cam_seq_num) {
-        prev_camera_time = camera_time;
         prev_cam_seq_num = camera_data.sequence_num;
         timespec_get(&camera_time, TIME_UTC);
       }
@@ -321,7 +320,9 @@ void calc_pid() {
     }
 
     // PD controller for y
-    float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) * 1000); // Convert elapsed time to ms
+    struct timespec tcurr;      // get current time in seconds
+    timespec_get(&tcurr, TIME_UTC);
+    float elapsed_cam_time = (timespec_diff_sec(camera_time, tcurr) * 1000); // Convert elapsed time to ms
     float auto_desired_pitch_p = CAM_X_PGAIN*(camera_x_estimated - DESIRED_X);
     float auto_desired_pitch_d = CAM_X_DGAIN*(camera_x_estimated - X_PREV) / elapsed_cam_time;
     X_PREV = camera_x_estimated;    // Update previous y position
@@ -329,11 +330,11 @@ void calc_pid() {
     float auto_desired_pitch = auto_desired_pitch_p - auto_desired_pitch_d;
 
     // Put cap on auto desired roll
-    if (auto_desired_pitch >= 5.0) {
-      auto_desired_pitch = 5.0;
+    if (auto_desired_pitch >= AUTO_ANGLE_LIM) {
+      auto_desired_pitch = AUTO_ANGLE_LIM;
     }
-    else if (auto_desired_pitch <= -5.0) {
-      auto_desired_pitch = -5.0;
+    else if (auto_desired_pitch <= -AUTO_ANGLE_LIM) {
+      auto_desired_pitch = -AUTO_ANGLE_LIM;
     }
     
     pitch_desired = 0.5*joystick_desired_pitch + 0.5*auto_desired_pitch;
@@ -383,7 +384,9 @@ void calc_pid() {
     }
 
     // PD controller for y
-    float elapsed_cam_time = (timespec_diff_sec(prev_camera_time, camera_time) * 1000); // Convert elapsed time to ms
+    struct timespec tcurr;      // get current time in seconds
+    timespec_get(&tcurr, TIME_UTC);
+    float elapsed_cam_time = (timespec_diff_sec(camera_time, tcurr) * 1000); // Convert elapsed time to ms
     float auto_desired_roll_p = CAM_Y_PGAIN*(camera_y_estimated - DESIRED_Y);
     float auto_desired_roll_d = CAM_Y_DGAIN*(camera_y_estimated - Y_PREV) / elapsed_cam_time;
     Y_PREV = camera_y_estimated;    // Update previous y position
@@ -391,11 +394,11 @@ void calc_pid() {
     float auto_desired_roll = auto_desired_roll_p - auto_desired_roll_d;
 
     // Put cap on auto desired roll
-    if (auto_desired_roll >= 5.0) {
-      auto_desired_roll = 5.0;
+    if (auto_desired_roll >= AUTO_ANGLE_LIM) {
+      auto_desired_roll = AUTO_ANGLE_LIM;
     }
-    else if (auto_desired_roll <= -5.0) {
-      auto_desired_roll = -5.0;
+    else if (auto_desired_roll <= -AUTO_ANGLE_LIM) {
+      auto_desired_roll = -AUTO_ANGLE_LIM;
     }
     
     roll_desired = 0.5*joystick_desired_roll + 0.5*auto_desired_roll;
