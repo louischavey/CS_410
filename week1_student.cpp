@@ -78,9 +78,9 @@ float intl_roll=0;
 float intl_pitch=0;
 
 // Data Plotting
-int plot = 0;
-#define MAX_ITERS 700  // for data collection
-#define PLOT_COLS 6
+int plot = 1;
+#define MAX_ITERS 1000  // for data collection
+#define PLOT_COLS 12
 float plot_data[MAX_ITERS][PLOT_COLS];  // first 3 cols roll, second 3 are pitch
 int iteration=0;
 
@@ -161,14 +161,22 @@ float DESIRED_X;
 float X_PREV;
 float camera_x_estimated;
 #define CAM_X_PGAIN 0.02
-#define CAM_X_DGAIN 0.005
+#define CAM_X_DGAIN 10.0
 
 int init_desired_y = 0;
 float DESIRED_Y;
 float Y_PREV;
 float camera_y_estimated;
 #define CAM_Y_PGAIN 0.04
-#define CAM_Y_DGAIN 0.001
+#define CAM_Y_DGAIN 10.0
+
+// Sensor noise causing major issues
+//    - Small gain, doesn't react to box movements
+//    - Large gain amplifies noise
+//
+// Overshooting / Drift on x and y axes
+//
+// Losing sight of camera has been a major issue
 
 
 //////////////////////////////////////////////
@@ -247,7 +255,7 @@ int main (int argc, char *argv[])
 
       calc_pid();  // set motor speeds based on PID control
       set_motors(motor_commands[3], motor_commands[2], motor_commands[1], motor_commands[0]);
-      if(plot){iteration++;}
+      if(plot && autonomous){iteration++;}
     }
 
     to_csv(&plot_data[0][0], MAX_ITERS, PLOT_COLS);
@@ -322,9 +330,18 @@ void calc_pid() {
     // PD controller for y
     struct timespec tcurr;      // get current time in seconds
     timespec_get(&tcurr, TIME_UTC);
-    float elapsed_cam_time = (timespec_diff_sec(camera_time, tcurr) * 1000); // Convert elapsed time to ms
+    float elapsed_cam_time = (timespec_diff_sec(tcurr, camera_time) * 1000); // Convert elapsed time to ms
     float auto_desired_pitch_p = CAM_X_PGAIN*(camera_x_estimated - DESIRED_X);
     float auto_desired_pitch_d = CAM_X_DGAIN*(camera_x_estimated - X_PREV) / elapsed_cam_time;
+
+    // Put cap on derivative term
+    if (auto_desired_pitch_d >= 100.0) {
+      auto_desired_pitch_d = 100.0;
+    }
+    else if (auto_desired_pitch_d <= -100.0) {
+      auto_desired_pitch_d = -100.0;
+    }
+
     X_PREV = camera_x_estimated;    // Update previous y position
 
     float auto_desired_pitch = auto_desired_pitch_p - auto_desired_pitch_d;
@@ -386,9 +403,19 @@ void calc_pid() {
     // PD controller for y
     struct timespec tcurr;      // get current time in seconds
     timespec_get(&tcurr, TIME_UTC);
-    float elapsed_cam_time = (timespec_diff_sec(camera_time, tcurr) * 1000); // Convert elapsed time to ms
+    float elapsed_cam_time = (timespec_diff_sec(tcurr, camera_time) * 1000); // Convert elapsed time to ms
     float auto_desired_roll_p = CAM_Y_PGAIN*(camera_y_estimated - DESIRED_Y);
     float auto_desired_roll_d = CAM_Y_DGAIN*(camera_y_estimated - Y_PREV) / elapsed_cam_time;
+
+
+    // Put cap on derivative term
+    if (auto_desired_roll_d >= 100.0) {
+      auto_desired_roll_d = 100.0;
+    }
+    else if (auto_desired_roll_d <= -100.0) {
+      auto_desired_roll_d = -100.0;
+    }
+
     Y_PREV = camera_y_estimated;    // Update previous y position
 
     float auto_desired_roll = auto_desired_roll_p - auto_desired_roll_d;
@@ -406,12 +433,12 @@ void calc_pid() {
 
     // write to data array
     if(plot) {
-      plot_data[iteration][0] = roll_filter;
-      plot_data[iteration][1] = auto_desired_roll;
-      plot_data[iteration][2] = camera_y_estimated;
-      plot_data[iteration][3] = auto_desired_roll_p;
-      plot_data[iteration][4] = auto_desired_roll_d;
-      plot_data[iteration][5] = DESIRED_Y;
+      plot_data[iteration][6] = roll_filter;
+      plot_data[iteration][7] = auto_desired_roll;
+      plot_data[iteration][8] = camera_y_estimated;
+      plot_data[iteration][9] = auto_desired_roll_p;
+      plot_data[iteration][10] = auto_desired_roll_d;
+      plot_data[iteration][11] = DESIRED_Y;
 
     }
   }
@@ -464,13 +491,6 @@ void calc_pid() {
       motor_commands[i] = -MOTOR_LIM;
     }
   }
-
-  if(plot) {
-      plot_data[iteration][0] = pitch_filter;
-      plot_data[iteration][1] = pitch_desired;
-  }
-  
-
   
 
 }
@@ -584,7 +604,7 @@ int check_end_conditions(Joystick joystick_data, struct timespec tstart) {
   // get current time in seconds
   struct timespec tcurr;
   timespec_get(&tcurr, TIME_UTC);
-  double elapsed = timespec_diff_sec(tstart, tcurr);
+  double elapsed = timespec_diff_sec(tcurr, tstart);
   // printf("Elapsed: %.3f sec Seq_num: %10d\n\r", elapsed, joystick_data.sequence_num);
 
   if (elapsed >= TIMEOUT) {                  // controller timeout (if sequence number hasn't change for TIMEOUT seconds)
