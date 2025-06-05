@@ -161,14 +161,14 @@ float DESIRED_X;
 float X_PREV;
 float camera_x_estimated;
 #define CAM_X_PGAIN 0.02
-#define CAM_X_DGAIN 10.0
+#define CAM_X_DGAIN 1.0
 
 int init_desired_y = 0;
 float DESIRED_Y;
 float Y_PREV;
 float camera_y_estimated;
 #define CAM_Y_PGAIN 0.04
-#define CAM_Y_DGAIN 10.0
+#define CAM_Y_DGAIN 1.0
 
 // Sensor noise causing major issues
 //    - Small gain, doesn't react to box movements
@@ -361,7 +361,7 @@ void calc_pid() {
     if(plot) {
       plot_data[iteration][0] = pitch_filter;
       plot_data[iteration][1] = auto_desired_pitch;
-      plot_data[iteration][2] = camera_y_estimated;
+      plot_data[iteration][2] = camera_x_estimated;
       plot_data[iteration][3] = auto_desired_pitch_p;
       plot_data[iteration][4] = auto_desired_pitch_d;
       plot_data[iteration][5] = DESIRED_X;
