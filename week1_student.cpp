@@ -102,21 +102,21 @@ int paused=0;
 
 // PID Control
 int motor_commands[4];  // hold commanded motor speeds based on PID control
-#define THRUST_NEUTRAL 1900  // flying off ground 2-4 feet: 1650
-#define THRUST_AMP 400  // flying off ground 2-4 feet: 300
+#define THRUST_NEUTRAL 1550  // flying off ground 2-4 feet: 1650
+#define THRUST_AMP 300  // flying off ground 2-4 feet: 300
 int thrust=THRUST_NEUTRAL;
 // Pitch
 #define PITCH_AMP 5  // default: 5
 #define PPGAIN 13.5    // PPGAIN = 13.5
 #define PDGAIN 2.7  // PDGAIN = 2.7
-#define PIGAIN 0.2  // PIGAIN = 0.2
+#define PIGAIN 0.1  // PIGAIN = 0.2
 float Pintegral = 0.0;
 #define PISATURATE 100
 // Roll
 #define ROLL_AMP 5  // default: 5
 #define RPGAIN 13.5    // RPGAIN = 13.5
 #define RDGAIN 2.2  // RDGAIN = 2.2
-#define RIGAIN 0.17  // RIGAIN = 0.17
+#define RIGAIN 0.1  // RIGAIN = 0.17
 float Rintegral = 0.0;
 #define RISATURATE 100
 // Yaw
@@ -161,14 +161,14 @@ float DESIRED_X;
 float X_PREV;
 float camera_x_estimated;
 #define CAM_X_PGAIN 0.03
-#define CAM_X_DGAIN 15.0
+#define CAM_X_DGAIN 2.0
 
 int init_desired_y = 0;
 float DESIRED_Y;
 float Y_PREV;
 float camera_y_estimated;
-#define CAM_Y_PGAIN 0.02
-#define CAM_Y_DGAIN 15.0
+#define CAM_Y_PGAIN 0.04
+#define CAM_Y_DGAIN 2.0
 
 // Sensor noise causing major issues
 //    - Small gain, doesn't react to box movements
@@ -279,30 +279,30 @@ void calc_pid() {
 
   
   float auto_thrust = 0.0;
-  if (!autonomous) {
-    thrust = joystick_thrust;
-    printf("thrust: %d\n\r", thrust);
-  }
-  else {
-    // Calculate autonomous thrust
-    float auto_thrust_p = CAM_Z_PGAIN*(-((float)camera_data.z) - DESIRED_Z);
+  // if (!autonomous) {
+  thrust = joystick_thrust;
+  //   printf("thrust: %d\n\r", thrust);
+  // }
+  // else {
+  //   // Calculate autonomous thrust
+  //   float auto_thrust_p = CAM_Z_PGAIN*(-((float)camera_data.z) - DESIRED_Z);
     
-    struct timespec tcurr;      // get current time in seconds
-    timespec_get(&tcurr, TIME_UTC);
-    float elapsed_cam_time = (timespec_diff_sec(tcurr, camera_time) * 1000); // Convert elapsed time to ms
-    float auto_thrust_d = CAM_Z_DGAIN*((-((float)camera_data.z) - (float)Z_PREV) / elapsed_cam_time); 
-    Z_PREV = -1 * camera_data.z;
+  //   struct timespec tcurr;      // get current time in seconds
+  //   timespec_get(&tcurr, TIME_UTC);
+  //   float elapsed_cam_time = (timespec_diff_sec(tcurr, camera_time) * 1000); // Convert elapsed time to ms
+  //   float auto_thrust_d = CAM_Z_DGAIN*((-((float)camera_data.z) - (float)Z_PREV) / elapsed_cam_time); 
+  //   Z_PREV = -1 * camera_data.z;
 
-    auto_thrust_i += CAM_Z_IGAIN*(-1*((float)camera_data.z) - DESIRED_Z);
-    if (auto_thrust_i > AUTO_I_SATURATE) {auto_thrust_i = AUTO_I_SATURATE;}
-    else if (auto_thrust_i < -AUTO_I_SATURATE) {auto_thrust_i = -AUTO_I_SATURATE;}
+  //   auto_thrust_i += CAM_Z_IGAIN*(-1*((float)camera_data.z) - DESIRED_Z);
+  //   if (auto_thrust_i > AUTO_I_SATURATE) {auto_thrust_i = AUTO_I_SATURATE;}
+  //   else if (auto_thrust_i < -AUTO_I_SATURATE) {auto_thrust_i = -AUTO_I_SATURATE;}
 
-    auto_thrust = auto_thrust_p + auto_thrust_d + auto_thrust_i;
+  //   auto_thrust = auto_thrust_p + auto_thrust_d + auto_thrust_i;
 
-    thrust = (int)(0.5*joystick_thrust + 0.5*auto_thrust);
+  //   thrust = (int)(0.5*joystick_thrust + 0.5*auto_thrust);
 
-    printf("desired_z: %f camera_z: %d, thrust: %d, auto_thrust: %f auto_p: %f auto_d: %f auto_i: %f\n\r", DESIRED_Z, camera_data.z, thrust, auto_thrust, auto_thrust_p, auto_thrust_d, auto_thrust_i);
-  }
+  //   printf("desired_z: %f camera_z: %d, thrust: %d, auto_thrust: %f auto_p: %f auto_d: %f auto_i: %f\n\r", DESIRED_Z, camera_data.z, thrust, auto_thrust, auto_thrust_p, auto_thrust_d, auto_thrust_i);
+  // }
 
   //
   // Pitch
@@ -313,64 +313,64 @@ void calc_pid() {
   float joystick_desired_pitch = ((float)PITCH_AMP) * pitch_mult;
 
   float pitch_desired = 0.0;
-  // if (!autonomous) {
-  pitch_desired = joystick_desired_pitch;
-  // }
-  // else {
-  //   // Initialize desired y value and previous y_value to first camera reading
-  //   if (!init_desired_x) {
-  //     DESIRED_X = camera_data.x;
-  //     X_PREV = camera_data.x;
-  //     camera_x_estimated = camera_data.x;
-  //     init_desired_x = 1;
-  //   }
-  //   // Filtered estimate for current y position
-  //   // Prevent large reading spikes in filtered y position
-  //   if (!(fabs((float)camera_data.x) >= fabs(100.0*camera_x_estimated))) {
-  //     camera_x_estimated = 0.6*camera_x_estimated + 0.4*((float)camera_data.x);
-  //   }
+  if (!autonomous) {
+    pitch_desired = joystick_desired_pitch;
+  }
+  else {
+    // Initialize desired y value and previous y_value to first camera reading
+    if (!init_desired_x) {
+      DESIRED_X = camera_data.x;
+      X_PREV = camera_data.x;
+      camera_x_estimated = camera_data.x;
+      init_desired_x = 1;
+    }
+    // Filtered estimate for current y position
+    // Prevent large reading spikes in filtered y position
+    if (!(fabs((float)camera_data.x) >= fabs(100.0*camera_x_estimated))) {
+      camera_x_estimated = 0.8*camera_x_estimated + 0.2*((float)camera_data.x);
+    }
 
-  //   // PD controller for y
-  //   struct timespec tcurr;      // get current time in seconds
-  //   timespec_get(&tcurr, TIME_UTC);
-  //   float elapsed_cam_time = (timespec_diff_sec(tcurr, camera_time) * 1000); // Convert elapsed time to ms
-  //   float auto_desired_pitch_p = CAM_X_PGAIN*(camera_x_estimated - DESIRED_X);
-  //   float auto_desired_pitch_d = CAM_X_DGAIN*(camera_x_estimated - X_PREV) / elapsed_cam_time;
+    // PD controller for y
+    struct timespec tcurr;      // get current time in seconds
+    timespec_get(&tcurr, TIME_UTC);
+    float elapsed_cam_time = (timespec_diff_sec(tcurr, camera_time) * 1000); // Convert elapsed time to ms
+    float auto_desired_pitch_p = CAM_X_PGAIN*((float)camera_data.x - DESIRED_X);
+    float auto_desired_pitch_d = CAM_X_DGAIN*(camera_x_estimated - X_PREV) / elapsed_cam_time;
 
-  //   // Put cap on derivative term
-  //   if (auto_desired_pitch_d >= 100.0) {
-  //     auto_desired_pitch_d = 100.0;
-  //   }
-  //   else if (auto_desired_pitch_d <= -100.0) {
-  //     auto_desired_pitch_d = -100.0;
-  //   }
+    // Put cap on derivative term
+    if (auto_desired_pitch_d >= 100.0) {
+      auto_desired_pitch_d = 100.0;
+    }
+    else if (auto_desired_pitch_d <= -100.0) {
+      auto_desired_pitch_d = -100.0;
+    }
 
-  //   X_PREV = camera_x_estimated;    // Update previous y position
+    X_PREV = camera_x_estimated;    // Update previous y position
 
-  //   float auto_desired_pitch = auto_desired_pitch_p - auto_desired_pitch_d;
+    float auto_desired_pitch = auto_desired_pitch_p - auto_desired_pitch_d;
 
-  //   // Put cap on auto desired roll
-  //   if (auto_desired_pitch >= AUTO_ANGLE_LIM) {
-  //     auto_desired_pitch = AUTO_ANGLE_LIM;
-  //   }
-  //   else if (auto_desired_pitch <= -AUTO_ANGLE_LIM) {
-  //     auto_desired_pitch = -AUTO_ANGLE_LIM;
-  //   }
+    // Put cap on auto desired roll
+    if (auto_desired_pitch >= AUTO_ANGLE_LIM) {
+      auto_desired_pitch = AUTO_ANGLE_LIM;
+    }
+    else if (auto_desired_pitch <= -AUTO_ANGLE_LIM) {
+      auto_desired_pitch = -AUTO_ANGLE_LIM;
+    }
     
-  //   pitch_desired = 0.5*joystick_desired_pitch + 0.5*auto_desired_pitch;
-  //   printf("x_desired: %f pitch_actual: %f pitch_desired: %f auto_desired: %f filtered_x: %f camera_x: %d pitch_p: %f pitch_d: %f\n\r", DESIRED_X, pitch_filter, pitch_desired, auto_desired_pitch, camera_x_estimated, camera_data.x, auto_desired_pitch_p, auto_desired_pitch_d);
+    pitch_desired = 0.5*joystick_desired_pitch + 0.5*auto_desired_pitch;
+    printf("x_desired: %f pitch_actual: %f pitch_desired: %f auto_desired: %f filtered_x: %f camera_x: %d pitch_p: %f pitch_d: %f\n\r", DESIRED_X, pitch_filter, pitch_desired, auto_desired_pitch, camera_x_estimated, camera_data.x, auto_desired_pitch_p, auto_desired_pitch_d);
 
-  //   // write to data array
-  //   if(plot) {
-  //     plot_data[iteration][0] = pitch_filter;
-  //     plot_data[iteration][1] = auto_desired_pitch;
-  //     plot_data[iteration][2] = camera_x_estimated;
-  //     plot_data[iteration][3] = auto_desired_pitch_p;
-  //     plot_data[iteration][4] = auto_desired_pitch_d;
-  //     plot_data[iteration][5] = DESIRED_X;
+    // write to data array
+    if(plot) {
+      plot_data[iteration][0] = pitch_filter;
+      plot_data[iteration][1] = auto_desired_pitch;
+      plot_data[iteration][2] = camera_x_estimated;
+      plot_data[iteration][3] = auto_desired_pitch_p;
+      plot_data[iteration][4] = auto_desired_pitch_d;
+      plot_data[iteration][5] = DESIRED_X;
 
-  //   }
-  // }
+    }
+  }
   float pitch_error = (float)pitch_desired - pitch_filter;
 
   // Calculate integral
@@ -387,65 +387,65 @@ void calc_pid() {
   float roll_mult = ((float)joystick_data.roll - 128.0f) / 128.0f;
   float joystick_desired_roll = ((float)ROLL_AMP) * roll_mult;
   float roll_desired = 0.0;
-  // if (!autonomous) {
-  roll_desired = joystick_desired_roll;
-  // }
-  // else {
-  //   // Initialize desired y value and previous y_value to first camera reading
-  //   if (!init_desired_y) {
-  //     DESIRED_Y = camera_data.y;
-  //     Y_PREV = camera_data.y;
-  //     camera_y_estimated = camera_data.y;
-  //     init_desired_y = 1;
-  //   }
-  //   // Filtered estimate for current y position
-  //   // Prevent large reading spikes in filtered y position
-  //   if (!(fabs((float)camera_data.y) >= fabs(100.0*camera_y_estimated))) {
-  //     camera_y_estimated = 0.6*camera_y_estimated + 0.4*((float)camera_data.y);
-  //   }
+  if (!autonomous) {
+   roll_desired = joystick_desired_roll;
+  }
+  else {
+    // Initialize desired y value and previous y_value to first camera reading
+    if (!init_desired_y) {
+      DESIRED_Y = camera_data.y;
+      Y_PREV = camera_data.y;
+      camera_y_estimated = camera_data.y;
+      init_desired_y = 1;
+    }
+    // Filtered estimate for current y position
+    // Prevent large reading spikes in filtered y position
+    if (!(fabs((float)camera_data.y) >= fabs(100.0*camera_y_estimated))) {
+      camera_y_estimated = 0.8*camera_y_estimated + 0.2*((float)camera_data.y);
+    }
 
-  //   // PD controller for y
-  //   struct timespec tcurr;      // get current time in seconds
-  //   timespec_get(&tcurr, TIME_UTC);
-  //   float elapsed_cam_time = (timespec_diff_sec(tcurr, camera_time) * 1000); // Convert elapsed time to ms
-  //   float auto_desired_roll_p = CAM_Y_PGAIN*(camera_y_estimated - DESIRED_Y);
-  //   float auto_desired_roll_d = CAM_Y_DGAIN*(camera_y_estimated - Y_PREV) / elapsed_cam_time;
+    // PD controller for y
+    struct timespec tcurr;      // get current time in seconds
+    timespec_get(&tcurr, TIME_UTC);
+    float elapsed_cam_time = (timespec_diff_sec(tcurr, camera_time) * 1000); // Convert elapsed time to ms
+    float auto_desired_roll_p = CAM_Y_PGAIN*((float)camera_data.y - DESIRED_Y);
+    float auto_desired_roll_d = CAM_Y_DGAIN*(camera_y_estimated - Y_PREV) / elapsed_cam_time;
 
 
-  //   // Put cap on derivative term
-  //   if (auto_desired_roll_d >= 100.0) {
-  //     auto_desired_roll_d = 100.0;
-  //   }
-  //   else if (auto_desired_roll_d <= -100.0) {
-  //     auto_desired_roll_d = -100.0;
-  //   }
+    // Put cap on derivative term
+    if (auto_desired_roll_d >= 100.0) {
+      auto_desired_roll_d = 100.0;
+    }
+    else if (auto_desired_roll_d <= -100.0) {
+      auto_desired_roll_d = -100.0;
+    }
 
-  //   Y_PREV = camera_y_estimated;    // Update previous y position
+    Y_PREV = camera_y_estimated;    // Update previous y position
 
-  //   float auto_desired_roll = auto_desired_roll_p - auto_desired_roll_d;
+    float auto_desired_roll = auto_desired_roll_p - auto_desired_roll_d;
 
-  //   // Put cap on auto desired roll
-  //   if (auto_desired_roll >= AUTO_ANGLE_LIM) {
-  //     auto_desired_roll = AUTO_ANGLE_LIM;
-  //   }
-  //   else if (auto_desired_roll <= -AUTO_ANGLE_LIM) {
-  //     auto_desired_roll = -AUTO_ANGLE_LIM;
-  //   }
+    // Put cap on auto desired roll
+    if (auto_desired_roll >= AUTO_ANGLE_LIM) {
+      auto_desired_roll = AUTO_ANGLE_LIM;
+    }
+    else if (auto_desired_roll <= -AUTO_ANGLE_LIM) {
+      auto_desired_roll = -AUTO_ANGLE_LIM;
+    }
     
-  //   roll_desired = 0.5*joystick_desired_roll + 0.5*auto_desired_roll;
-  //   printf("y_desired: %f roll_actual: %f roll_desired: %f auto_desired: %f filtered_y: %f camera_y: %d roll_p: %f roll_d: %f\n\r", DESIRED_Y, roll_filter, roll_desired, auto_desired_roll, camera_y_estimated, camera_data.y, auto_desired_roll_p, auto_desired_roll_d);
+    roll_desired = 0.5*joystick_desired_roll + 0.5*auto_desired_roll;
+    printf("y_desired: %f roll_actual: %f roll_desired: %f auto_desired: %f filtered_y: %f camera_y: %d roll_p: %f roll_d: %f\n\r", DESIRED_Y, roll_filter, roll_desired, auto_desired_roll, camera_y_estimated, camera_data.y, auto_desired_roll_p, auto_desired_roll_d);
 
-  //   // write to data array
-  //   if(plot) {
-  //     plot_data[iteration][6] = roll_filter;
-  //     plot_data[iteration][7] = auto_desired_roll;
-  //     plot_data[iteration][8] = camera_y_estimated;
-  //     plot_data[iteration][9] = auto_desired_roll_p;
-  //     plot_data[iteration][10] = auto_desired_roll_d;
-  //     plot_data[iteration][11] = DESIRED_Y;
+    // write to data array
+    if(plot) {
+      plot_data[iteration][6] = roll_filter;
+      plot_data[iteration][7] = auto_desired_roll;
+      plot_data[iteration][8] = camera_y_estimated;
+      plot_data[iteration][9] = auto_desired_roll_p;
+      plot_data[iteration][10] = auto_desired_roll_d;
+      plot_data[iteration][11] = DESIRED_Y;
 
-  //   }
-  // }
+    }
+  }
   float roll_error = (float)roll_desired - roll_filter;
 
   // Calculate integral
